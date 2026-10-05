@@ -53,17 +53,19 @@ def _pg_repo():
     repo.close()
 
 
-def _reset_postgres(repo) -> None:
+def _reset_postgres(repo, *, seed: bool = True) -> None:
+    """Wipe all data; re-apply supabase/seed.sql unless ``seed=False`` (= migrations-only DB)."""
     with repo._pool.connection() as conn:
         conn.execute(
             """delete from worldpane.device_inputs;
                delete from worldpane.pairing_codes;
                delete from worldpane.devices;
                delete from worldpane.worlds;
-               delete from worldpane.character_profiles where world_id is not null;
+               delete from worldpane.character_profiles;
                delete from worldpane.event_definitions;"""
         )
-        conn.execute(SEED_SQL.read_text(encoding="utf-8"))
+        if seed:
+            conn.execute(SEED_SQL.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(params=_REPOS)

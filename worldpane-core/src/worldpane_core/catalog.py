@@ -21,9 +21,10 @@ from __future__ import annotations
 import copy
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from . import defaults
+from .timeutil import parse_window
 
 CATEGORIES = ("temporary", "leisure", "shared")
 CONTEXTS = ("weekday", "holiday", "leave")
@@ -97,14 +98,32 @@ def for_context(events: Iterable[Mapping[str, Any]], context: str | None) -> lis
     return out
 
 
-def validate_definition(defn: EventDefinition | Mapping[str, Any]) -> list[str]:
-    """回傳錯誤訊息清單；空清單代表可用。可傳 EventDefinition 或已 materialize 的 dict。"""
+def validate_definition(defn: EventDefinition | Mapping[str, Any], category: str | None = None) -> list[str]:
+    """回傳錯誤訊息清單；空清單代表可用。
+
+    可傳 EventDefinition，或已 materialize（含 Profile / World 覆寫）的 event dict
+    （此時需給 ``category``）。每個 ``context_overrides`` 套用後的版本也會一併檢查，
+    因為 Generator 實際吃的是覆寫後的值。
+    """
     if isinstance(defn, EventDefinition):
         category = defn.category
         ev = materialize(defn)
     else:
-        category = str(defn.get("category", ""))
+        category = category or str(defn.get("category", ""))
         ev = dict(defn)
+    errors = _validate_effective(ev, category)
+    overrides = ev.get("context_overrides") or {}
+    if not isinstance(overrides, Mapping):
+        return errors + [f"{ev.get('type', '?')}: context_overrides must be an object"]
+    for ctx, patch in overrides.items():
+        if not isinstance(patch, Mapping):
+            errors.append(f"{ev.get('type', '?')}: context_overrides.{ctx} must be an object")
+            continue
+        errors += [f"{e} (context {ctx})" for e in _validate_effective(_deep_merge(ev, patch), category)]
+    return errors
+
+
+def _validate_effective(ev: Mapping[str, Any], category: str) -> list[str]:
     errors: list[str] = []
     key = ev.get("type", "?")
     if category not in CATEGORIES:
@@ -118,13 +137,24 @@ def validate_definition(defn: EventDefinition | Mapping[str, Any]) -> list[str]:
     try:
         if float(ev.get("weight", 1)) < 0:
             errors.append(f"{key}: weight must be >= 0")
+        int(ev.get("cooldown_min", 0))
     except (TypeError, ValueError):
-        errors.append(f"{key}: weight must be a number")
-    for ctx in ev.get("allowed_context") or []:
-        if not isinstance(ctx, str):
-            errors.append(f"{key}: allowed_context entries must be strings")
-    if category in ("leisure", "shared") and not ev.get("allowed_time"):
+        errors.append(f"{key}: weight / cooldown_min must be numbers")
+    allowed_context = ev.get("allowed_context")
+    if allowed_context is not None and (
+        not isinstance(allowed_context, list) or not all(isinstance(c, str) for c in allowed_context)
+    ):
+        errors.append(f"{key}: allowed_context must be a list of strings")
+    windows = ev.get("allowed_time")
+    if category in ("leisure", "shared") and not windows:
         errors.append(f"{key}: allowed_time required for {category} events")
+    for w in windows or []:
+        try:
+            start, end = parse_window(w)
+            if start >= end:
+                raise ValueError
+        except (TypeError, ValueError, AttributeError, IndexError):
+            errors.append(f"{key}: bad allowed_time window {w!r}")
     if category == "shared":
         min_p = ev.get("min_participants", 2)
         max_p = ev.get("max_participants")
@@ -132,7 +162,24 @@ def validate_definition(defn: EventDefinition | Mapping[str, Any]) -> list[str]:
             errors.append(f"{key}: min_participants must be an integer >= 2")
         elif max_p is not None and (not isinstance(max_p, int) or max_p < min_p):
             errors.append(f"{key}: max_participants must be null (= N) or >= min_participants")
+        try:
+            int(ev.get("max_per_day", 1))
+        except (TypeError, ValueError):
+            errors.append(f"{key}: max_per_day must be an integer")
     return errors
+
+
+OnInvalid = Callable[[str], None]
+
+
+def _keep(ev: dict[str, Any], category: str, on_invalid: OnInvalid | None) -> bool:
+    errors = validate_definition(ev, category)
+    if not errors:
+        return True
+    if on_invalid is None:
+        raise ValueError("; ".join(errors))
+    on_invalid("; ".join(errors))
+    return False
 
 
 @dataclass(frozen=True)
@@ -144,10 +191,13 @@ class PoolEntry:
     enabled: bool = True
 
 
-def build_event_config(settings: Mapping[str, Any], pool: Iterable[PoolEntry]) -> dict[str, Any]:
+def build_event_config(
+    settings: Mapping[str, Any], pool: Iterable[PoolEntry], on_invalid: OnInvalid | None = None
+) -> dict[str, Any]:
     """Profile 的 ``event_config`` 設定（不含事件清單）+ 事件池 → Generator 用的 event_config。
 
     ``settings`` 形如 ``{"temporary": {"attempts_per_block": 3, ...}, "leisure": {"windows": ...}}``。
+    每個事件在套用所有覆寫後才驗證；無效者交給 ``on_invalid`` 並略過（未提供則 raise ValueError）。
     """
     cfg = copy.deepcopy(dict(settings))
     for category in ("temporary", "leisure"):
@@ -157,12 +207,16 @@ def build_event_config(settings: Mapping[str, Any], pool: Iterable[PoolEntry]) -
         cat = entry.definition.category
         if cat not in ("temporary", "leisure") or not entry.enabled:
             continue
-        cfg[cat]["events"].append(materialize(entry.definition, entry.overrides))
+        ev = materialize(entry.definition, entry.overrides)
+        if _keep(ev, cat, on_invalid):
+            cfg[cat]["events"].append(ev)
     return cfg
 
 
 def build_shared_event_config(
-    settings: Mapping[str, Any], definitions: Iterable[EventDefinition]
+    settings: Mapping[str, Any],
+    definitions: Iterable[EventDefinition],
+    on_invalid: OnInvalid | None = None,
 ) -> dict[str, Any]:
     """World 的 shared 設定 + 可見的 shared 定義 → Generator 用的 shared_event_config。
 
@@ -175,7 +229,7 @@ def build_shared_event_config(
         for d in _ordered(definitions)
         if d.category == "shared"
     ]
-    cfg["rules"] = rules
+    cfg["rules"] = [r for r in rules if _keep(r, "shared", on_invalid)]
     return cfg
 
 
@@ -261,6 +315,7 @@ __all__ = [
     "CATEGORIES",
     "CONTEXTS",
     "EventDefinition",
+    "OnInvalid",
     "PoolEntry",
     "build_event_config",
     "build_shared_event_config",

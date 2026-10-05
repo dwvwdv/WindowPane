@@ -31,6 +31,9 @@ class InMemoryRepository:
         self._code_by_hash: dict[str, str] = {}
         self._inputs: list[DeviceInput] = []
 
+    def install_official_content(self, definitions, profiles) -> None:
+        """Nothing to install: in-memory characters carry their profiles directly."""
+
     # worlds
     def create_world(self, world: World) -> None:
         with self._lock:

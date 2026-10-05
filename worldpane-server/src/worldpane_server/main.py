@@ -6,6 +6,7 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from worldpane_core.catalog import official_definitions
 
 from . import __version__
 from .api.routes import router
@@ -19,6 +20,7 @@ from .seed import (
     DEMO_WORLD_ID,
     create_world_with_defaults,
     official_default_characters,
+    official_profiles,
 )
 from .security import hash_pairing_code
 from .services import ServiceError, WorldService
@@ -98,6 +100,10 @@ def create_app(
         return {"status": "ok"}
 
     app.include_router(router)
+
+    # A database created from migrations only (e.g. `supabase db push`, no seed.sql) still gets
+    # the official catalog and profile templates as global rows; existing rows are kept as-is.
+    service.repo.install_official_content(official_definitions(), official_profiles())
 
     if settings.seed_demo_world:
         code = seed_demo(service)

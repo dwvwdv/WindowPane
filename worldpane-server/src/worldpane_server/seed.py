@@ -47,6 +47,10 @@ def official_profile(key: str) -> CharacterProfile:
     )
 
 
+def official_profiles() -> list[CharacterProfile]:
+    return [official_profile(key) for key in OFFICIAL_PROFILES]
+
+
 def official_shared_definitions():
     return [d for d in official_definitions() if d.category == "shared"]
 

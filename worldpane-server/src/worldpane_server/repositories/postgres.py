@@ -72,6 +72,41 @@ class PostgresRepository:
     def close(self) -> None:
         self._pool.close()
 
+    # --- official content ---------------------------------------------------------------
+    def install_official_content(
+        self, definitions: list[EventDefinition], profiles: list[CharacterProfile]
+    ) -> None:
+        with self._pool.connection() as conn, conn.transaction():
+            for d in definitions:
+                conn.execute(
+                    """insert into worldpane.event_definitions
+                         (id, world_id, key, category, label, scene, location, activity, params, enabled, sort_order)
+                       values (%s, null, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       on conflict do nothing""",
+                    (d.id, d.key, d.category, d.label, d.scene, d.location, d.activity,
+                     Jsonb(dict(d.params)), d.enabled, d.sort_order),
+                )
+            for p in profiles:
+                conn.execute(
+                    """insert into worldpane.character_profiles
+                         (id, world_id, key, name, schedule_config, meal_config, leave_config, event_config)
+                       values (%s, null, %s, %s, %s, %s, %s, %s)
+                       on conflict do nothing""",
+                    (p.id, p.key, p.name or p.key, Jsonb(p.schedule_config), Jsonb(p.meal_config),
+                     Jsonb(p.leave_config), Jsonb(p.event_config)),
+                )
+                for entry in p.event_pool:
+                    conn.execute(
+                        """insert into worldpane.profile_event_pools (profile_id, event_definition_id, overrides)
+                           select %s, %s, %s
+                            where exists (select 1 from worldpane.character_profiles
+                                           where id = %s and world_id is null)
+                              and exists (select 1 from worldpane.event_definitions
+                                           where id = %s and world_id is null)
+                           on conflict do nothing""",
+                        (p.id, entry.definition.id, Jsonb(dict(entry.overrides)), p.id, entry.definition.id),
+                    )
+
     # --- worlds -----------------------------------------------------------------------
     def create_world(self, world: World) -> None:
         with self._pool.connection() as conn:

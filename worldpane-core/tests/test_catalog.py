@@ -151,3 +151,42 @@ def test_validate_definition_reports_problems():
     assert any("min_duration" in e for e in errors)
     assert any("allowed_time" in e for e in errors)
     assert any("min_participants" in e for e in errors)
+
+
+def test_invalid_override_is_skipped_after_merge():
+    defs = {(d.category, d.key): d for d in official_definitions()}
+    reading = defs[("leisure", "reading")]
+    shower = defs[("leisure", "shower")]
+    bad_ctx = dataclasses.replace(
+        defs[("leisure", "phone")],
+        params={**defs[("leisure", "phone")].params, "context_overrides": {"holiday": {"min_duration": 999}}},
+    )
+    errors: list[str] = []
+    cfg = build_event_config(
+        {"leisure": {}},
+        [
+            PoolEntry(reading, {"min_duration": 90, "max_duration": 10}),  # valid base, bad override
+            PoolEntry(bad_ctx),  # bad only on holidays
+            PoolEntry(shower),
+        ],
+        on_invalid=errors.append,
+    )
+    assert [e["type"] for e in cfg["leisure"]["events"]] == ["shower"]
+    assert len(errors) == 2 and any("context holiday" in e for e in errors)
+
+    shared = build_shared_event_config(
+        {"overrides": {"date": {"min_participants": 1}}},
+        [d for d in official_definitions() if d.category == "shared"],
+        on_invalid=errors.append,
+    )
+    assert "date" not in {r["type"] for r in shared["rules"]}
+
+
+def test_invalid_entry_raises_without_handler():
+    reading = next(d for d in official_definitions() if d.key == "reading")
+    try:
+        build_event_config({}, [PoolEntry(reading, {"allowed_time": [["25:00", "26:00"]]})])
+    except ValueError as exc:
+        assert "allowed_time" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError")

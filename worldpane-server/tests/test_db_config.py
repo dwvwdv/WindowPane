@@ -100,3 +100,50 @@ def test_memory_and_postgres_demo_worlds_match(client, token, settings, clock):
     clock.set(datetime(2026, 10, 9, 9, 0, tzinfo=TPE))
     for day in ("2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08"):
         assert _history(mem, mem_token, day) == _history(client, token, day)
+
+
+def test_invalid_override_is_skipped_not_500(client, token, repo, clock):
+    with repo._pool.connection() as conn:
+        conn.execute(
+            """update worldpane.profile_event_pools
+                  set overrides = '{"min_duration": 90, "max_duration": 10}'"""
+        )
+        conn.execute(
+            """update worldpane.worlds
+                  set shared_event_config = jsonb_set(shared_event_config, '{overrides}',
+                      '{"date": {"min_participants": 1}}')"""
+        )
+    clock.set(datetime(2026, 10, 9, 9, 0, tzinfo=TPE))
+    for day in ("2026-10-06", "2026-10-07", "2026-10-08"):
+        r = client.get("/api/v1/world/history", params={"date": day}, headers=auth(token))
+        assert r.status_code == 200
+        types = {e["type"] for c in r.json()["characters"] for e in c["events"]}
+        assert "date" not in types and not types & {"slacking", "reading", "shower"}
+    assert client.get("/api/v1/device/state", headers=auth(token)).status_code == 200
+
+
+def test_migrations_only_database_works(settings, clock, request):
+    """No seed.sql (e.g. `supabase db push`): startup installs official content as global rows."""
+    from fastapi.testclient import TestClient
+
+    from worldpane_server.main import create_app
+
+    from .conftest import _reset_postgres, pair
+
+    pg = request.getfixturevalue("_pg_repo")
+    _reset_postgres(pg, seed=False)
+    app = TestClient(create_app(settings, repository=pg, clock=clock))
+    with pg._pool.connection() as conn:
+        owned = conn.execute(
+            "select count(*) as n from worldpane.character_profiles where world_id is not null"
+        ).fetchone()["n"]
+        shared = conn.execute(
+            "select count(*) as n from worldpane.event_definitions where category = 'shared' and world_id is null"
+        ).fetchone()["n"]
+    assert owned == 0 and shared > 0
+
+    created = app.post("/api/v1/world", json={"name": "Our Room"})
+    assert created.status_code == 201, created.text
+    mine = created.json()["device"]["device_token"]
+    assert app.get("/api/v1/device/state", headers=auth(mine)).status_code == 200
+    assert app.get("/api/v1/device/state", headers=auth(pair(app))).status_code == 200

@@ -15,8 +15,11 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Protocol, runtime_checkable
 
+from worldpane_core.catalog import EventDefinition
+
 from ..domain import (
     Character,
+    CharacterProfile,
     CharacterRelationship,
     Device,
     DeviceInput,
@@ -36,6 +39,15 @@ class PairingCodeRejected(Exception):
 
 @runtime_checkable
 class Repository(Protocol):
+    # --- official content ---------------------------------------------------------------
+    def install_official_content(
+        self, definitions: list[EventDefinition], profiles: list[CharacterProfile]
+    ) -> None:
+        """Make sure the official event catalog and profile templates exist as GLOBAL rows
+        (``world_id`` NULL), so a migration-only database works without ``seed.sql``.
+        Existing rows are left untouched: tuning done in the database is never overwritten."""
+        ...
+
     # --- worlds -----------------------------------------------------------------------
     def create_world(self, world: World) -> None: ...
 

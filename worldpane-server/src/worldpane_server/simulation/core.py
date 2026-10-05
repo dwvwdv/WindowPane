@@ -10,12 +10,7 @@ import logging
 from datetime import date, datetime
 
 import worldpane_core as core
-from worldpane_core.catalog import (
-    PoolEntry,
-    build_event_config,
-    build_shared_event_config,
-    validate_definition,
-)
+from worldpane_core.catalog import build_event_config, build_shared_event_config
 
 from ..domain import Character, CharacterRelationship, Event, World
 from .provider import CharacterNow
@@ -23,30 +18,21 @@ from .provider import CharacterNow
 log = logging.getLogger(__name__)
 
 
-def _valid(entries: list[PoolEntry], owner: str) -> list[PoolEntry]:
-    """Skip catalog rows that would crash the generator, loudly, instead of failing the world."""
-    out = []
-    for entry in entries:
-        errors = validate_definition(entry.definition)
-        if errors:
-            log.warning("skipping invalid event definition for %s: %s", owner, "; ".join(errors))
-            continue
-        out.append(entry)
-    return out
+def _skip(owner: str):
+    """Bad catalog data (after all overrides) is logged and skipped, never a 500."""
+    return lambda error: log.warning("skipping invalid event for %s: %s", owner, error)
 
 
 def to_core_world(world: World) -> core.World:
-    definitions = [
-        e.definition
-        for e in _valid([PoolEntry(d) for d in world.shared_event_definitions], f"world {world.id}")
-    ]
     return core.World(
         id=world.id,
         name=world.name,
         simulation_start_date=world.simulation_start_date,
         timezone=world.timezone,
         simulation_version=str(world.simulation_version),
-        shared_event_config=build_shared_event_config(world.shared_event_config, definitions),
+        shared_event_config=build_shared_event_config(
+            world.shared_event_config, world.shared_event_definitions, on_invalid=_skip(f"world {world.id}")
+        ),
     )
 
 
@@ -57,7 +43,7 @@ def to_core_character(c: Character) -> core.Character:
         schedule_config=p.schedule_config,
         meal_config=p.meal_config,
         leave_config=p.leave_config,
-        event_config=build_event_config(p.event_config, _valid(p.event_pool, f"profile {p.id}")),
+        event_config=build_event_config(p.event_config, p.event_pool, on_invalid=_skip(f"profile {p.id}")),
     )
     return core.Character(
         id=c.id, world_id=c.world_id, appearance_key=c.appearance_key,
