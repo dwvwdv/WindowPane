@@ -1,0 +1,54 @@
+# One-command deploy of the Worldpane backend + Postgres:
+#   docker compose up -d --build
+# Optional settings go in a .env file next to this one (see .env.example).
+# To use Supabase instead of the bundled database, set WORLDPANE_DATABASE_URL in .env and run
+#   docker compose up -d --build --no-deps server
+name: worldpane
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: worldpane
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-worldpane}
+      WORLDPANE_DB_PASSWORD: ${WORLDPANE_DB_PASSWORD:-worldpane}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./supabase:/supabase:ro
+      - ./docker/db/init-worldpane.sh:/docker-entrypoint-initdb.d/10-worldpane.sh:ro
+    healthcheck:
+      # TCP on purpose: during first-time init Postgres only listens on the unix socket.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "worldpane"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  server:
+    build:
+      context: .
+      dockerfile: worldpane-server/Dockerfile
+    image: worldpane-server:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORLDPANE_ENV: ${WORLDPANE_ENV:-prod}
+      WORLDPANE_REPOSITORY: postgres
+      WORLDPANE_DATABASE_URL: ${WORLDPANE_DATABASE_URL:-postgresql://service_role:${WORLDPANE_DB_PASSWORD:-worldpane}@db:5432/worldpane}
+      WORLDPANE_PAIRING_CODE_SECRET: ${WORLDPANE_PAIRING_CODE_SECRET:-}
+      WORLDPANE_PAIRING_CODE_TTL_SECONDS: ${WORLDPANE_PAIRING_CODE_TTL_SECONDS:-600}
+      WORLDPANE_PAIRING_CODE_MAX_USES: ${WORLDPANE_PAIRING_CODE_MAX_USES:-1}
+      WORLDPANE_DEFAULT_TIMEZONE: ${WORLDPANE_DEFAULT_TIMEZONE:-Asia/Taipei}
+      WORLDPANE_SEED_DEMO_WORLD: ${WORLDPANE_SEED_DEMO_WORLD:-false}
+      WORLDPANE_DEMO_PAIRING_CODE: ${WORLDPANE_DEMO_PAIRING_CODE:-}
+    ports:
+      - "${WORLDPANE_PORT:-8000}:8000"
+    volumes:
+      - server-data:/var/lib/worldpane
+
+volumes:
+  db-data:
+  server-data:
