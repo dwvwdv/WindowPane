@@ -11,31 +11,28 @@ Worldpane（窗間）Backend API 骨架：Display API、World History、Device P
 
 ## Docker 一鍵部署
 
-在 repo 根目錄：
+預設接 Supabase：
+
+1. 先把 `supabase/migrations` 套用到你的 Supabase 專案（例如 `supabase db push`）。
+2. 把根目錄的 `.env.example` 複製成 `.env`，在 `WORLDPANE_DATABASE_URL` 填 service-role 的 Postgres 連線字串（Project Settings → Database，pooler 可用）。
+3. 在 repo 根目錄執行：
 
 ```bash
 docker compose up -d --build
 curl http://127.0.0.1:8000/healthz   # {"status":"ok"}
 ```
 
-這會起兩個容器：
+server 以 `WORLDPANE_ENV=prod`、非 root 身分執行，啟動時會自動補上官方事件目錄和 Profile 模板。Pairing code 的 HMAC key 若未設定，會在第一次啟動時產生，存在 `server-data` volume，重啟後沿用。
 
-- `db`：Postgres 16。第一次建立 volume 時，會自動建立 Supabase 的 `service_role` 等角色，再套用 `supabase/migrations` 和 `seed.sql`。
-- `server`：本服務，`WORLDPANE_ENV=prod`，接上 `db`。
-
-不需要任何設定就能啟動。Pairing code 的 HMAC key 若未設定，會在第一次啟動時產生，存在 `server-data` volume，重啟後沿用。要調整設定時，把根目錄的 `.env.example` 複製成 `.env` 再修改。資料庫密碼只會在第一次建立 volume 時套用，請在第一次啟動前改好。
-
-改用 Supabase：在 `.env` 設定 `WORLDPANE_DATABASE_URL`（service-role 連線字串），並先用 `supabase db push` 套用 migrations。然後只起 server：
+沒有 Supabase（本機或離線測試）時，可以加上 `--profile local-db`，順便起一個 Postgres 16。第一次建立 volume 時，它會自動建立 Supabase 的 `service_role` 等角色，並套用同一份 migrations 和 `seed.sql`：
 
 ```bash
-docker compose up -d --build --no-deps server
+docker compose --profile local-db up -d --build
 ```
 
-官方事件目錄和 Profile 模板會在 server 啟動時自動補上。
+部署後用 `POST /api/v1/world` 建立 World，回應裡有第一台裝置的 token，以及給第二台裝置用的 pairing code（見下方 curl 範例）。Demo World 預設不發 code（`WORLDPANE_SEED_DEMO_WORLD=false`）。
 
-部署後用 `POST /api/v1/world` 建立 World，回應裡會有第一台裝置的 token 和給第二台裝置用的 pairing code（見下方 curl 範例）。Demo World 預設不發 code（`WORLDPANE_SEED_DEMO_WORLD=false`）。
-
-只建 image：`docker build -f worldpane-server/Dockerfile -t worldpane-server .`（必須在 repo 根目錄，因為要一起裝 worldpane-core）。
+只建 image：`docker build -f worldpane-server/Dockerfile -t worldpane-server .`（必須在 repo 根目錄執行，因為要一起裝 worldpane-core）。
 
 ## 安裝與執行
 

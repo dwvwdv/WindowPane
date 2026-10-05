@@ -1,12 +1,18 @@
-# One-command deploy of the Worldpane backend + Postgres:
+# One-command deploy of the Worldpane backend.
+#
+# Supabase (default): put the service-role connection string in .env as WORLDPANE_DATABASE_URL
+# (apply supabase/migrations first, e.g. `supabase db push`), then
 #   docker compose up -d --build
-# Optional settings go in a .env file next to this one (see .env.example).
-# To use Supabase instead of the bundled database, set WORLDPANE_DATABASE_URL in .env and run
-#   docker compose up -d --build --no-deps server
+#
+# No Supabase (local / offline): also start a bundled Postgres with the same migrations + seed
+#   docker compose --profile local-db up -d --build
+#
+# Other optional settings: see .env.example.
 name: worldpane
 
 services:
   db:
+    profiles: ["local-db"]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -34,6 +40,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+        required: false  # only when started with --profile local-db
     environment:
       WORLDPANE_ENV: ${WORLDPANE_ENV:-prod}
       WORLDPANE_REPOSITORY: postgres
