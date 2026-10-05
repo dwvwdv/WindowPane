@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     demo_pairing_code: str = ""
 
     repository: Literal["memory", "postgres"] = "memory"
-    simulation_provider: Literal["stub", "core"] = "stub"
+    simulation_provider: Literal["core"] = "core"
 
-    # TODO(postgres): DSN for the future Supabase/Postgres repository. Never commit a value.
+    # Postgres DSN (Supabase: the service-role connection string). Never commit a value.
     database_url: str = ""
 
     @model_validator(mode="after")

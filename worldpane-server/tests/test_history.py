@@ -19,7 +19,7 @@ def test_history_today_only_past_events(client, token):
         assert starts == sorted(starts)
         assert all(s <= NOW for s in starts)
         assert all(s.date().isoformat() == "2026-10-05" for s in starts)
-        assert c["events"][0]["activity"] == "sleeping"
+        assert {"school", "work"} & {e["type"] for e in c["events"]}, "weekday base schedule is in history"
 
 
 def test_history_shared_event_listed_for_every_participant(client, token, clock):

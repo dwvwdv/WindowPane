@@ -13,7 +13,13 @@ from .clock import Clock, SystemClock
 from .config import Settings, get_settings
 from .repositories.base import Repository
 from .repositories.memory import InMemoryRepository
-from .seed import DEMO_WORLD_ID, create_world_with_defaults
+from .seed import (
+    DEMO_CHARACTER_IDS,
+    DEMO_START_DATE,
+    DEMO_WORLD_ID,
+    create_world_with_defaults,
+    official_default_characters,
+)
 from .services import ServiceError, WorldService
 from .simulation.provider import SimulationProvider, build_provider
 
@@ -25,19 +31,21 @@ def build_repository(settings: Settings) -> Repository:
         return InMemoryRepository()
     from .repositories.postgres import PostgresRepository
 
-    return PostgresRepository(settings.database_url)  # TODO(postgres)
+    return PostgresRepository(settings.database_url)
 
 
 def seed_demo(service: WorldService) -> str:
-    """Create the 小白 + 小雞毛 demo world and a pairing code for it. Returns the code."""
-    now = service.clock.now()
-    tz = service.settings.default_timezone
-    from zoneinfo import ZoneInfo
+    """Ensure the 小白 + 小雞毛 demo world exists and issue a pairing code for it.
 
-    create_world_with_defaults(
-        service.repo, world_id=DEMO_WORLD_ID, name="Demo World", timezone=tz,
-        created_at=now, start_date=now.astimezone(ZoneInfo(tz)).date(),
-    )
+    With Postgres the world usually already exists (``supabase/seed.sql``); it is reused.
+    """
+    if service.repo.get_world(DEMO_WORLD_ID) is None:
+        create_world_with_defaults(
+            service.repo, world_id=DEMO_WORLD_ID, name="窗間 Demo",
+            timezone=service.settings.default_timezone, created_at=service.clock.now(),
+            start_date=DEMO_START_DATE,
+            characters=official_default_characters(DEMO_WORLD_ID, DEMO_CHARACTER_IDS),
+        )
     out = service.issue_pairing_code(
         DEMO_WORLD_ID, max_uses=10, code=service.settings.demo_pairing_code or None
     )

@@ -93,21 +93,21 @@ class WorldService:
         events = self.ensure_plan(world, characters, today - timedelta(days=1)) + self.ensure_plan(
             world, characters, today
         )
-        current = self.sim.current_state(events, now)
+        current = self.sim.current_state(events, now, [c.id for c in characters])
+
+        def local(dt: datetime | None) -> datetime | None:
+            return dt.astimezone(tz) if dt is not None else None
 
         char_states: list[schemas.CharacterState] = []
         for c in characters:
-            ev = current.get(c.id)
-            if ev is None:
-                char_states.append(schemas.CharacterState(
-                    id=c.id, appearance=c.appearance_key, scene=FALLBACK_SCENE,
-                    activity=FALLBACK_ACTIVITY, started_at=None, ends_at=None,
-                ))
-            else:
-                char_states.append(schemas.CharacterState(
-                    id=c.id, appearance=c.appearance_key, scene=ev.scene, activity=ev.activity,
-                    started_at=ev.start_at.astimezone(tz), ends_at=ev.end_at.astimezone(tz),
-                ))
+            cur = current.get(c.id)
+            char_states.append(schemas.CharacterState(
+                id=c.id, appearance=c.appearance_key,
+                scene=cur.scene if cur else FALLBACK_SCENE,
+                activity=cur.activity if cur else FALLBACK_ACTIVITY,
+                started_at=local(cur.started_at) if cur else None,
+                ends_at=local(cur.ends_at) if cur else None,
+            ))
 
         fingerprint = hashlib.sha256(
             json.dumps([s.model_dump(mode="json") for s in char_states], sort_keys=True).encode()
@@ -157,7 +157,7 @@ class WorldService:
     def _register_device(self, world_id: str, firmware_version: str | None) -> schemas.DeviceCredentials:
         token = generate_device_token()
         device = Device(
-            id=new_id("dev"), world_id=world_id, device_token_hash=hash_device_token(token),
+            id=new_id(), world_id=world_id, device_token_hash=hash_device_token(token),
             created_at=self.clock.now(), firmware_version=firmware_version,
         )
         self.repo.add_device(device)
@@ -172,7 +172,7 @@ class WorldService:
         for _ in range(20):
             value = code or generate_pairing_code()
             pc = PairingCode(
-                id=new_id("pc"), world_id=world.id,
+                id=new_id(), world_id=world.id,
                 code_hash=hash_pairing_code(value, self.settings.pairing_code_secret),
                 expires_at=expires, max_uses=uses, used_count=0, created_at=now,
             )
@@ -204,7 +204,7 @@ class WorldService:
         tz_name = body.timezone or self.settings.default_timezone
         start = now.astimezone(ZoneInfo(tz_name)).date()
         world = create_world_with_defaults(
-            self.repo, world_id=new_id("wld"), name=body.name, timezone=tz_name,
+            self.repo, world_id=new_id(), name=body.name, timezone=tz_name,
             created_at=now, start_date=start,
         )
         creds = self._register_device(world.id, body.firmware_version)
@@ -213,7 +213,7 @@ class WorldService:
 
     def record_input(self, device: Device, body: schemas.DeviceInputIn) -> schemas.DeviceInputAccepted:
         item = DeviceInput(
-            id=new_id("inp"), device_id=device.id, world_id=device.world_id, type=body.type,
+            id=new_id(), device_id=device.id, world_id=device.world_id, type=body.type,
             button=body.button, received_at=self.clock.now(), payload=body.model_dump(),
         )
         # V1: inputs are logged only; they do not alter the simulation.

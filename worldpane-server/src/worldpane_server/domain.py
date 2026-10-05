@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
+from worldpane_core.catalog import EventDefinition, PoolEntry
+
 
 @dataclass
 class World:
@@ -28,17 +30,30 @@ class World:
     # Fingerprint of the last Display State served (everything except server_time).
     # When the visible state changes, revision is bumped (see Repository.record_state_fingerprint).
     state_fingerprint: str | None = None
+    # Shared-event knobs as stored (worlds.shared_event_config: attempts, trigger_probability,
+    # per-event "overrides", ...) plus the shared event definitions visible to this world.
+    # worldpane-core assembles both into its generator config.
+    shared_event_config: dict[str, Any] = field(default_factory=dict)
+    shared_event_definitions: list[EventDefinition] = field(default_factory=list)
 
 
 @dataclass
 class CharacterProfile:
-    """Behaviour config (spec §6). Opaque JSON-ish config consumed by the simulation provider."""
+    """Behaviour config (spec §6), stored in the DB and consumed by worldpane-core.
+
+    ``event_config`` holds only the knobs (attempts, windows, ...); the events a profile can
+    draw come from ``event_pool`` (rows of ``profile_event_pools`` joined with their
+    ``event_definitions``). Adding an event is a data change, never a code change.
+    """
 
     id: str
     schedule_config: dict[str, Any] = field(default_factory=dict)
     meal_config: dict[str, Any] = field(default_factory=dict)
     leave_config: dict[str, Any] = field(default_factory=dict)
     event_config: dict[str, Any] = field(default_factory=dict)
+    event_pool: list[PoolEntry] = field(default_factory=list)
+    key: str | None = None
+    name: str = ""
 
 
 @dataclass
@@ -81,8 +96,11 @@ class Event:
     local_date: date
     simulation_version: int
     priority: int = 0
-    status: str = "planned"
+    status: str = "scheduled"
     metadata: dict[str, Any] = field(default_factory=dict)
+    location: str | None = None
+    # "base" = background schedule block (SCHOOL 08:30–17:30) that foreground events overlay.
+    layer: str = "foreground"
 
     @property
     def is_shared(self) -> bool:

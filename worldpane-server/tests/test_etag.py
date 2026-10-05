@@ -38,6 +38,6 @@ def test_etag_changes_when_state_changes(client, token, clock):
 
 
 def test_stale_etag_gets_full_body(client, token):
-    r = client.get("/api/v1/device/state", headers={**auth(token), "If-None-Match": '"wld_demo.0"'})
+    r = client.get("/api/v1/device/state", headers={**auth(token), "If-None-Match": '"stale.0"'})
     assert r.status_code == 200
     assert r.json()["characters"]

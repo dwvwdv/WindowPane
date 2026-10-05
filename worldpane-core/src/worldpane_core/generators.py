@@ -11,6 +11,7 @@ from typing import Any
 from .calendar_ctx import CalendarContext, DayContext
 from .draft import Draft, is_free
 from .models import Character, CharacterRelationship, EventKind, Layer, Priority, World
+from .catalog import for_context
 from .seeds import weighted_choice
 from .timeutil import parse_window
 
@@ -124,7 +125,7 @@ def generate_temporary(
     rng: random.Random, character: Character, base: list[Draft], existing: list[Draft]
 ) -> list[Draft]:
     cfg = character.profile.event_config.get("temporary") or {}
-    defs = cfg.get("events", [])
+    defs = for_context(cfg.get("events", []), None)
     if not defs or not base:
         return []
     attempts = int(cfg.get("attempts_per_block", 0))
@@ -190,7 +191,7 @@ def generate_leisure(
     rng: random.Random, character: Character, ctx: DayContext, existing: list[Draft]
 ) -> list[Draft]:
     cfg = character.profile.event_config.get("leisure") or {}
-    defs = [d for d in cfg.get("events", []) if ctx.key in d.get("allowed_context", [])]
+    defs = for_context(cfg.get("events", []), ctx.key)
     windows_cfg = cfg.get("windows", {})
     windows = windows_cfg.get(ctx.key)
     if windows is None and ctx.key == "leave":
@@ -322,7 +323,7 @@ def generate_shared(
     existing: list[Draft],
 ) -> list[Draft]:
     cfg = world.shared_event_config or {}
-    rules = cfg.get("rules", [])
+    rules = for_context(cfg.get("rules", []), calendar.key)
     n = len(characters)
     if n < 2 or not rules:
         return []
@@ -339,8 +340,7 @@ def generate_shared(
             continue
         eligible = [
             r for r in rules
-            if calendar.key in r.get("allowed_context", [])
-            and count.get(r["type"], 0) < int(r.get("max_per_day", 1))
+            if count.get(r["type"], 0) < int(r.get("max_per_day", 1))
             and n >= int(r.get("min_participants", 2))
         ]
         if not eligible:

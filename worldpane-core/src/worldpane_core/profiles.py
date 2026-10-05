@@ -49,6 +49,13 @@ def freelancer_profile(profile_id: str = "freelancer_profile") -> CharacterProfi
     )
 
 
+# 官方 Profile 模板：key → (名稱, factory)。DB seed 與 server 都以此為準。
+OFFICIAL_PROFILES = {
+    "official.student.v1": ("學生（官方預設：小白）", student_profile),
+    "official.office_worker.v1": ("上班族（官方預設：小雞毛）", office_worker_profile),
+    "official.freelancer.v1": ("自由工作者（範例）", freelancer_profile),
+}
+
 _EXTRA_NAMES = ["阿毛", "小橘", "豆豆", "阿布", "米米", "可可", "小黑", "胖胖"]
 _EXTRA_PROFILES = [freelancer_profile, student_profile, office_worker_profile]
 

@@ -4,20 +4,30 @@ Worldpane（窗間）Backend API 骨架：Display API、World History、Device P
 規格依據：`../Worldpane_專案規格.md` §18–23、§27、§29、§31。
 
 - Python 3.11 / FastAPI / pydantic v2 / pydantic-settings
-- 目前持久層為 **in-memory**（重啟即清空），模擬引擎為 **stub**（非 V1 規則）
-- 啟動時自動建立 Demo World（小白 + 小雞毛），並印出一組 Pairing Code
+- 模擬引擎：**worldpane-core**（`simulation/core.py` adapter；server 不含任何生活規則）
+- 持久層：**Postgres / Supabase**（`WORLDPANE_REPOSITORY=postgres`），或 in-memory（預設，重啟即清空）
+- 所有可調數值（§34 TBD）與事件定義都在 DB，改資料即生效於「之後產生」的 daily plan，不需部署
+- 啟動時確保 Demo World（小白 + 小雞毛）存在，並印出一組 Pairing Code
 
 ## 安裝與執行
 
 ```bash
 cd worldpane-server
-python3 -m pip install -e ".[dev]"
+python3 -m pip install -e ../worldpane-core -e ".[dev]"   # worldpane-core 需一起安裝
 
 # 開發模式：固定 demo pairing code 方便測試（不設定則隨機，並印在 log）
 WORLDPANE_DEMO_PAIRING_CODE=824917 uvicorn worldpane_server.main:app --reload
 ```
 
-不安裝套件也可以：`PYTHONPATH=src uvicorn worldpane_server.main:app`。
+不安裝套件也可以：`PYTHONPATH=src:../worldpane-core/src uvicorn worldpane_server.main:app`。
+
+接 Postgres（先依 `../supabase/README.md` 套用 migrations + seed）：
+
+```bash
+WORLDPANE_REPOSITORY=postgres \
+WORLDPANE_DATABASE_URL='postgresql://...'   # Supabase 的 service-role 連線字串，勿 commit \
+WORLDPANE_PAIRING_CODE_SECRET=... uvicorn worldpane_server.main:app
+```
 
 Swagger UI：<http://127.0.0.1:8000/docs>
 
@@ -30,10 +40,11 @@ Swagger UI：<http://127.0.0.1:8000/docs>
 | `WORLDPANE_PAIRING_CODE_TTL_SECONDS` | `600` | Pairing code 有效秒數 |
 | `WORLDPANE_PAIRING_CODE_MAX_USES` | `1` | 預設可使用次數 |
 | `WORLDPANE_DEFAULT_TIMEZONE` | `Asia/Taipei` | 新 World 預設時區 |
-| `WORLDPANE_SEED_DEMO_WORLD` | `true` | 啟動時建立 `wld_demo` |
+| `WORLDPANE_SEED_DEMO_WORLD` | `true` | 確保 Demo World 存在（id 與 `supabase/seed.sql` 相同）並發一組 code |
 | `WORLDPANE_DEMO_PAIRING_CODE` | 空 | Demo World 的固定 6 碼（僅開發用；可用 10 次） |
-| `WORLDPANE_REPOSITORY` | `memory` | `postgres` 尚未實作 |
-| `WORLDPANE_SIMULATION_PROVIDER` | `stub` | `core` 尚未接上 worldpane-core |
+| `WORLDPANE_REPOSITORY` | `memory` | `memory` / `postgres` |
+| `WORLDPANE_DATABASE_URL` | 空 | `postgres` 時必填；service-role DSN（支援 Supabase pooler） |
+| `WORLDPANE_SIMULATION_PROVIDER` | `core` | worldpane-core |
 
 Repo 中不含任何 secret。
 
@@ -99,6 +110,8 @@ curl -s -X POST $BASE/world/pairing-codes -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 python3 -m pytest
+# 另外對 Postgres 跑一次（務必是可丟棄的 DB，已套用 supabase/migrations；每個測試會清空並重跑 seed.sql）
+WORLDPANE_TEST_DATABASE_URL='postgresql://service_role:...@localhost:5432/wp_test' python3 -m pytest
 ```
 
 ## 架構
@@ -118,21 +131,35 @@ src/worldpane_server/
 ├─ repositories/
 │  ├─ base.py           Repository Protocol（持久層 seam）
 │  ├─ memory.py         InMemoryRepository
-│  └─ postgres.py       TODO：Supabase/Postgres 實作
+│  └─ postgres.py       PostgresRepository（worldpane schema，psycopg 3 + pool）
 └─ simulation/
-   ├─ provider.py       SimulationProvider Protocol + CoreSimulationProvider TODO
-   └─ stub.py           StubSimulationProvider（暫代 worldpane-core）
+   ├─ provider.py       SimulationProvider Protocol
+   └─ core.py           CoreSimulationProvider：DB 設定 → worldpane-core → domain Event
 ```
 
 ### 兩個 seam
 
 1. **`SimulationProvider`**（`simulation/provider.py`）：
    `generate_daily_plan(world, characters, relationships, local_date) -> list[Event]`、
-   `current_state(events, now) -> {character_id: Event}`。
-   worldpane-core 完成後，寫一個 `CoreSimulationProvider` adapter 並設
-   `WORLDPANE_SIMULATION_PROVIDER=core`。Server 本身不放任何排程/請假/用餐規則。
-2. **`Repository`**（`repositories/base.py`）：之後的 `PostgresRepository` 實作同一個 Protocol，
-   對應 `/supabase` 的 schema；注意事項寫在 `repositories/postgres.py` 的 TODO。
+   `current_state(events, now, character_ids) -> {character_id: CharacterNow}`。
+   `CoreSimulationProvider` 用 `worldpane_core.catalog` 把 DB 的 profile 設定 + 事件池 + World
+   shared 設定組成 core 的 config，無效的事件定義會記 warning 並略過，不會讓整個 World 壞掉。
+2. **`Repository`**（`repositories/base.py`）：`InMemoryRepository` 與 `PostgresRepository`
+   實作同一個 Protocol。Postgres 版每次載入 World / 角色時讀取 `event_definitions` /
+   `profile_event_pools`，所以調參不需重啟。
+
+### 事件可擴充性（新增事件 = 新增資料）
+
+| 想做的事 | 改哪裡 |
+|---|---|
+| 新增個人事件（例如煮飯） | `insert into worldpane.event_definitions (category='leisure', params=...)`，再加到 `profile_event_pools` |
+| 新增共同事件（例如桌遊 3..N 人） | `insert into worldpane.event_definitions (category='shared', ...)`，所有 World 自動可用 |
+| 假日 / 請假日改權重或停用 | `params.context_overrides = {"holiday": {"weight": 40}}` |
+| 某個 Profile 的事件改參數 | `profile_event_pools.overrides` |
+| 某個 World 停用某共同事件 | `worlds.shared_event_config.overrides = {"date": {"enabled": false}}` |
+| 用餐跳過率、請假機率等 §34 TBD | `character_profiles.meal_config` / `leave_config` / `event_config` |
+
+已持久化的 daily plan 不會被回溯改寫；變更只影響之後才產生的日期。
 
 ### 設計重點
 
@@ -149,7 +176,8 @@ src/worldpane_server/
 - **Pairing code**：6 位隨機數字，與 World ID 無關；儲存 `HMAC-SHA256(secret, code)`
   （6 碼只有 10^6 種，純 sha256 可被暴力還原）。有 TTL、`max_uses`、原子遞增 `used_count`；
   同值的有效 code 不會重複發出。
-- **角色數 1..N**：API、repository、stub 都以 list 處理；測試涵蓋 1 / 2 / 3 人 World。
+- **角色數 1..N**：API、repository、simulation 都以 list 處理；測試涵蓋 1 / 2 / 3 人 World。
+- **跨午夜**：V1 沒有睡覺事件，也沒有跨午夜事件；夜間沒有事件時回傳 idle（`started_at` 為上一個事件結束時間，可能為 null）。
 - **Device Preference（§23）**：屬於每台裝置、不影響共享 World State，本骨架尚未提供 endpoint。
 
 ### 已知限制 / TODO

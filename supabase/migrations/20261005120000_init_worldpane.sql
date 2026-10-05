@@ -133,6 +133,10 @@ create trigger worlds_set_updated_at
 create table worldpane.world_revisions (
   world_id   uuid primary key references worldpane.worlds (id) on delete cascade,
   revision   bigint not null default 1 check (revision >= 1),
+  -- Fingerprint of the last Display State served. The display state changes
+  -- with time even without writes (an event ends), so the backend bumps the
+  -- revision when the fingerprint changes (see worldpane-server).
+  state_fingerprint text,
   updated_at timestamptz not null default now()
 );
 
@@ -393,8 +397,12 @@ create table worldpane.events (
   type          text not null check (type ~ '^[a-z0-9_]{1,64}$'),
   -- Scene the device renders, e.g. 'school_classroom', 'home_living_room' (spec §19).
   scene         text not null check (scene ~ '^[a-z0-9_]{1,64}$'),
-  -- Optional semantic location (spec §9: state = location + activity).
-  location      text check (location is null or location ~ '^[a-z0-9_]{1,64}$'),
+  -- Semantic state (spec §9: state = location + activity), e.g. OFFICE / slacking.
+  location      text check (location is null or location ~ '^[A-Za-z0-9_]{1,64}$'),
+  activity      text not null check (activity ~ '^[a-z0-9_]{1,64}$'),
+  -- 'base' = background schedule block (SCHOOL 08:30–17:30) that foreground
+  -- events (meal, slacking, ...) overlay; 'foreground' = everything else.
+  layer         text not null default 'foreground' check (layer in ('base', 'foreground')),
   priority      worldpane.event_priority not null,
   status        worldpane.event_status not null default 'scheduled',
   start_at      timestamptz not null,

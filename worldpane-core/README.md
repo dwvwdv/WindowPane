@@ -54,6 +54,22 @@ states = current_state(events, now, [c.id for c in characters])
 | `CharacterRelationship` | character_a_id ↔ character_b_id、relationship_type |
 | `Event` | id、world_id、type、scene、location、activity、start_at/end_at（tz-aware）、priority、participants（1..N）、metadata、simulation_version、layer（base / foreground） |
 
+## 事件目錄（catalog.py）：新增事件只要新增資料
+
+事件（temporary / leisure / shared）都是資料，Generator 裡沒有任何針對個別事件的分支。
+
+- `EventDefinition(key, category, label, scene, location, activity, params, enabled, sort_order)`：
+  `params` 放 weight、duration、allowed_time、allowed_context、cooldown、participants 等所有可調值。
+- `params.context_overrides`：依 Context 覆寫，例如 `{"holiday": {"weight": 40}, "leave": {"enabled": false}}`（§13）。
+- `build_event_config(settings, pool)`：Profile 的設定 + 事件池（`PoolEntry(definition, overrides)`）→ Generator config。
+- `build_shared_event_config(settings, definitions)`：World 的 shared 設定（含 `overrides`）+ shared 定義 → Generator config。
+- `validate_definition(...)`：檢查資料是否可用；server 載入 DB 資料時用它過濾壞資料。
+- 抽籤順序會影響 RNG，所以一律依 `(sort_order, key)` 排序，確保同樣的 DB 資料得到同樣的結果。
+
+實際數值存在 DB（`supabase/migrations/20261005130000_event_catalog.sql`）。`defaults.py` 只是官方預設與
+seed 來源：`python scripts/gen_seed_sql.py > ../supabase/seed.sql`（`--check` 檢查是否過期）。
+`tests/test_catalog.py` 驗證「DB 組裝出的設定」與 inline 預設產生完全相同的 Timeline，並示範只加資料就能新增個人事件與 3..N 人共同事件。
+
 ## 生成流程（§15）
 
 1. Calendar Context（週末 = holiday；`World.holiday_dates` 亦為 holiday）

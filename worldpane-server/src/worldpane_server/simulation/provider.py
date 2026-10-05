@@ -1,25 +1,32 @@
 """Simulation seam.
 
-The real engine lives in ``worldpane-core`` (built separately). It will expose roughly::
-
-    generate_daily_plan(world, characters, relationships, local_date) -> events
-    current_state(events, now) -> per-character current event
-
-The server talks to it only through ``SimulationProvider``. Swap implementations with
-``WORLDPANE_SIMULATION_PROVIDER`` (``stub`` | ``core``).
-
-TODO(core): implement ``CoreSimulationProvider`` as a thin adapter that converts the server's
-domain dataclasses into worldpane-core's types, calls its two functions, and converts results
-back into ``domain.Event``. Keep all schedule/meal/leave/event rules inside worldpane-core;
-the server must not grow simulation logic (spec §30/§31).
+All schedule / meal / leave / event rules live in ``worldpane-core`` (spec §30/§31); the server
+only talks to it through ``SimulationProvider`` and never grows simulation logic of its own.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Protocol, runtime_checkable
 
 from ..domain import Character, CharacterRelationship, Event, World
+
+
+@dataclass(frozen=True)
+class CharacterNow:
+    """What one character is doing at a point in time (spec §19 semantic state).
+
+    ``started_at`` / ``ends_at`` describe the visible segment (e.g. "back in class" after a
+    nap starts when the nap ends) and may be None when idle with nothing before/after.
+    """
+
+    scene: str
+    activity: str
+    location: str | None
+    started_at: datetime | None
+    ends_at: datetime | None
+    event_id: str | None = None
 
 
 @runtime_checkable
@@ -31,35 +38,23 @@ class SimulationProvider(Protocol):
         relationships: list[CharacterRelationship],
         local_date: date,
     ) -> list[Event]:
-        """Deterministic: same (world, characters, date, simulation_version) -> same events.
+        """Deterministic: same (world, characters, config, date, simulation_version) -> same events.
 
         ``local_date`` is a date in the World timezone. Returned events carry aware datetimes.
         Shared events are a single Event with 2..N participant ids.
         """
         ...
 
-    def current_state(self, events: list[Event], now: datetime) -> dict[str, Event]:
-        """Map character_id -> the event that character is in at ``now``.
-
-        Characters with no active event are simply absent; the caller renders a fallback.
-        """
+    def current_state(
+        self, events: list[Event], now: datetime, character_ids: list[str]
+    ) -> dict[str, CharacterNow]:
+        """Map every id in ``character_ids`` to what that character is doing at ``now``."""
         ...
 
 
-class CoreSimulationProvider:  # pragma: no cover - placeholder
-    """TODO(core): adapter around worldpane-core. Intentionally not importing it yet."""
-
-    def __init__(self) -> None:
-        raise NotImplementedError(
-            "worldpane-core adapter not wired yet; use WORLDPANE_SIMULATION_PROVIDER=stub"
-        )
-
-
 def build_provider(name: str) -> SimulationProvider:
-    if name == "stub":
-        from .stub import StubSimulationProvider
-
-        return StubSimulationProvider()
     if name == "core":
+        from .core import CoreSimulationProvider
+
         return CoreSimulationProvider()
     raise ValueError(f"unknown simulation provider: {name}")

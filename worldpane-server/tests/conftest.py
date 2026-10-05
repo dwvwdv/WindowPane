@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -34,9 +36,43 @@ def clock() -> FixedClock:
     return FixedClock(NOW)
 
 
-@pytest.fixture
-def repo() -> InMemoryRepository:
-    return InMemoryRepository()
+# Every API test runs against the in-memory repository, and also against Postgres when
+# WORLDPANE_TEST_DATABASE_URL points at a THROWAWAY database with supabase/migrations applied.
+# Each test wipes it and re-applies supabase/seed.sql.
+TEST_DATABASE_URL = os.environ.get("WORLDPANE_TEST_DATABASE_URL", "")
+SEED_SQL = Path(__file__).resolve().parents[2] / "supabase" / "seed.sql"
+_REPOS = ["memory"] + (["postgres"] if TEST_DATABASE_URL else [])
+
+
+@pytest.fixture(scope="session")
+def _pg_repo():
+    from worldpane_server.repositories.postgres import PostgresRepository
+
+    repo = PostgresRepository(TEST_DATABASE_URL, max_size=4)
+    yield repo
+    repo.close()
+
+
+def _reset_postgres(repo) -> None:
+    with repo._pool.connection() as conn:
+        conn.execute(
+            """delete from worldpane.device_inputs;
+               delete from worldpane.pairing_codes;
+               delete from worldpane.devices;
+               delete from worldpane.worlds;
+               delete from worldpane.character_profiles where world_id is not null;
+               delete from worldpane.event_definitions;"""
+        )
+        conn.execute(SEED_SQL.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(params=_REPOS)
+def repo(request):
+    if request.param == "memory":
+        return InMemoryRepository()
+    pg = request.getfixturevalue("_pg_repo")
+    _reset_postgres(pg)
+    return pg
 
 
 @pytest.fixture

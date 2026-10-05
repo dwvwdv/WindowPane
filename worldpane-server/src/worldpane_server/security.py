@@ -10,12 +10,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import uuid
 
 DEVICE_TOKEN_PREFIX = "wpd_"
 
 
-def new_id(prefix: str) -> str:
-    return f"{prefix}_{secrets.token_hex(8)}"
+def new_id() -> str:
+    """Random UUID string; every id is a uuid column in the database."""
+    return str(uuid.uuid4())
 
 
 def generate_device_token() -> str:

@@ -4,23 +4,32 @@ import hashlib
 from datetime import timedelta
 
 from worldpane_server.repositories.memory import InMemoryRepository
+from worldpane_server.seed import DEMO_WORLD_ID
 
 from .conftest import DEMO_CODE, auth, pair
 
 
-def test_pair_happy_path_stores_only_token_hash(client, repo: InMemoryRepository):
+def test_pair_happy_path_stores_only_token_hash(client, repo):
     r = client.post("/api/v1/device/pair", json={"pairing_code": DEMO_CODE, "firmware_version": "0.1.0"})
     assert r.status_code == 201
     body = r.json()
-    assert body["world_id"] == "wld_demo"
+    assert body["world_id"] == DEMO_WORLD_ID
     assert body["token_type"] == "Bearer"
     token = body["device_token"]
 
-    devices = repo.list_devices("wld_demo")
+    devices = repo.list_devices(DEMO_WORLD_ID)
     assert len(devices) == 1
     assert devices[0].device_token_hash == hashlib.sha256(token.encode()).hexdigest()
-    assert token not in repr(repo.__dict__)  # raw token is never persisted
-    assert DEMO_CODE not in repr(repo._codes)  # nor is the raw pairing code
+    if isinstance(repo, InMemoryRepository):
+        assert token not in repr(repo.__dict__)  # raw token is never persisted
+        assert DEMO_CODE not in repr(repo._codes)  # nor is the raw pairing code
+    else:
+        with repo._pool.connection() as conn:
+            dump = conn.execute(
+                "select (select json_agg(d) from worldpane.devices d)::text || "
+                "(select json_agg(p) from worldpane.pairing_codes p)::text as t"
+            ).fetchone()["t"]
+        assert token not in dump and DEMO_CODE not in dump
 
     assert client.get("/api/v1/device/state", headers=auth(token)).status_code == 200
 
@@ -30,7 +39,7 @@ def test_create_world_then_join_with_code(client):
     assert r.status_code == 201
     out = r.json()
     world_id, code = out["world_id"], out["pairing"]["pairing_code"]
-    assert world_id != "wld_demo"
+    assert world_id != DEMO_WORLD_ID
     assert len(code) == 6 and code.isdigit()
     assert world_id not in code
     assert out["pairing"]["max_uses"] == 1
@@ -78,7 +87,7 @@ def test_unknown_and_malformed_codes(client):
     unknown = "000000" if DEMO_CODE != "000000" else "999999"
     r = client.post("/api/v1/device/pair", json={"pairing_code": unknown})
     assert r.status_code == 400 and r.json()["detail"]["code"] == "invalid_pairing_code"
-    for bad in ("12345", "1234567", "abcdef", "wld_demo"):
+    for bad in ("12345", "1234567", "abcdef", DEMO_WORLD_ID):
         assert client.post("/api/v1/device/pair", json={"pairing_code": bad}).status_code == 422
 
 
@@ -86,7 +95,7 @@ def test_device_input_accepted(client, token, repo):
     r = client.post("/api/v1/device/input", headers=auth(token), json={"type": "button_press", "button": "A"})
     assert r.status_code == 202
     assert r.json()["accepted"] is True
-    logged = repo.list_device_inputs("wld_demo")
+    logged = repo.list_device_inputs(DEMO_WORLD_ID)
     assert [(i.type, i.button) for i in logged] == [("button_press", "A")]
     bad = client.post("/api/v1/device/input", headers=auth(token), json={"type": "DROP TABLE"})
     assert bad.status_code == 422

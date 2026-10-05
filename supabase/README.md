@@ -5,8 +5,9 @@ Worldpane（窗間）的資料庫結構。所有物件都放在獨立的 **`worl
 ```
 supabase/
 ├── migrations/
-│   └── 20261005120000_init_worldpane.sql   # schema、table、index、trigger、function、RLS、權限
-├── seed.sql                                 # 範例 World：小白 + 小雞毛（僅限本機開發）
+│   ├── 20261005120000_init_worldpane.sql   # schema、table、index、trigger、function、RLS、權限
+│   └── 20261005130000_event_catalog.sql    # 事件目錄 event_definitions、profile_event_pools、device_inputs
+├── seed.sql                                 # 由 worldpane-core/scripts/gen_seed_sql.py 產生：官方事件目錄、官方 Profile、Demo World
 └── README.md
 ```
 
@@ -102,5 +103,12 @@ V1 **不需要**把 `worldpane` 加到 Dashboard → Settings → API → Expose
 - **History 永久保存**：有參與過事件的角色無法硬刪（FK `NO ACTION`），請用 `archived_at`。刪除整個 World 時，`worlds_delete_events_first` trigger 會先刪 events 再讓 FK cascade 跑。
 - **跨 World 完整性**：participants / relationships / events 都用 `(id, world_id)` 複合 FK，保證角色、事件、計畫屬於同一個 World；`device_preferences.primary_character_id` 由 trigger 檢查必須在該裝置目前的 World 內，重新配對到別的 World 時會自動清空。
 - **Pairing code 雜湊**：6 位數碼只有 10^6 種，必須用 backend 的 HMAC secret（`WORLDPANE_PAIRING_CODE_SECRET`）雜湊，不可用單純 sha256。`pairing_codes_live_hash_uq` 只限制「尚未 consumed」的列，所以舊碼 consumed 後號碼可以重用。
-- **TBD 數值**：seed 中的機率 / 權重 / 時長 / cooldown 都是佔位值（規格 §34 未定案），每個 config 的 `_tbd` 陣列列出了哪些欄位是佔位。jsonb 結構需與 `worldpane-core` 的 Profile model 對齊。
+- **TBD 數值放在 DB**：規格 §34 未定案的機率 / 權重 / 時長 / cooldown 全部是資料，不在程式碼裡：
+  - `event_definitions.params`：每個事件的 weight、duration、allowed_time、allowed_context、cooldown、participants，以及 `context_overrides`（假日 / 請假日覆寫）
+  - `profile_event_pools.overrides`：某個 Profile 對某事件的覆寫
+  - `character_profiles.*_config`：作息、用餐（含 skip_probability）、請假機率、每個 block 的插曲次數
+  - `worlds.shared_event_config`：共同事件的嘗試次數 / 觸發機率，`overrides` 可針對單一事件停用或調參
+  seed 的數值全是佔位值。改動只影響之後才產生的 daily plan；已存的 plan 是歷史，不會改寫。
+- **新增事件 = 新增一列**：`event_definitions` 是資料驅動的事件目錄，Simulation Core 沒有任何針對個別事件的程式碼。World 自己的定義（`world_id` 非 NULL）會蓋過同 `(category, key)` 的官方定義。
+- **seed 不要手改**：`seed.sql` 由 `worldpane-core/scripts/gen_seed_sql.py` 從 core 的官方預設產生（`--check` 可驗證是否過期），確保 DB 與 core 預設一致。
 - 不存進資料庫：sprite / 動畫 binary、Wi-Fi 密碼（§29）。
