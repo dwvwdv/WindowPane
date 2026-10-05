@@ -27,7 +27,7 @@ from ..domain import (
 
 
 class PairingCodeRejected(Exception):
-    """Raised by ``consume_pairing_code`` when the code can no longer be used."""
+    """Raised by ``redeem_pairing_code`` when the code can no longer be used."""
 
     def __init__(self, reason: str) -> None:  # "expired" | "exhausted"
         super().__init__(reason)
@@ -55,8 +55,11 @@ class Repository(Protocol):
     # --- characters / relationships ------------------------------------------------------
     def add_character(self, character: Character) -> None: ...
 
-    def list_characters(self, world_id: str) -> list[Character]:
-        """All characters of a World (1..N), in stable display order."""
+    def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
+        """Characters of a World (1..N), in stable display order.
+
+        Archived (soft-deleted) characters are excluded unless ``include_archived``: they no
+        longer get new plans, but their history must stay readable."""
         ...
 
     def add_relationship(self, relationship: CharacterRelationship) -> None: ...
@@ -89,12 +92,11 @@ class Repository(Protocol):
 
     def get_pairing_code_by_hash(self, code_hash: str) -> PairingCode | None: ...
 
-    def consume_pairing_code(self, code_id: str, now: datetime) -> PairingCode:
-        """Atomically check expiry/max_uses and increment ``used_count``.
+    def redeem_pairing_code(self, code_id: str, device: Device, now: datetime) -> PairingCode:
+        """Atomically check expiry/max_uses, increment ``used_count`` AND insert ``device``.
 
-        Raises ``PairingCodeRejected``. In Postgres this is a single
-        ``UPDATE ... SET used_count = used_count + 1 WHERE id = $1 AND expires_at > now()
-        AND used_count < max_uses RETURNING *``.
+        Both happen in one transaction, so a crash or a failed device insert never burns a
+        single-use code without handing out credentials. Raises ``PairingCodeRejected``.
         """
         ...
 

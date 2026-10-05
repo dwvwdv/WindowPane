@@ -198,17 +198,17 @@ class PostgresRepository:
                  character.display_name, character.profile.id, character.sort_order),
             )
 
-    def list_characters(self, world_id: str) -> list[Character]:
+    def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         with self._pool.connection() as conn:
             rows = conn.execute(
-                """select c.id, c.world_id, c.appearance_key, c.display_name, c.sort_order,
+                """select c.id, c.world_id, c.appearance_key, c.display_name, c.sort_order, c.archived_at,
                           p.id as profile_id, p.key as profile_key, p.name as profile_name,
                           p.schedule_config, p.meal_config, p.leave_config, p.event_config
                      from worldpane.characters c
                      join worldpane.character_profiles p on p.id = c.profile_id
-                    where c.world_id = %s and c.archived_at is null
+                    where c.world_id = %s and (%s or c.archived_at is null)
                     order by c.sort_order, c.id""",
-                (world_id,),
+                (world_id, include_archived),
             ).fetchall()
             profile_ids = list({r["profile_id"] for r in rows})
             pools = conn.execute(
@@ -232,6 +232,7 @@ class PostgresRepository:
                 appearance_key=r["appearance_key"],
                 display_name=r["display_name"],
                 sort_order=r["sort_order"],
+                archived_at=r["archived_at"],
                 profile=CharacterProfile(
                     id=str(r["profile_id"]),
                     key=r["profile_key"],
@@ -344,13 +345,17 @@ class PostgresRepository:
     # --- devices -----------------------------------------------------------------------
     def add_device(self, device: Device) -> None:
         with self._pool.connection() as conn:
-            conn.execute(
-                """insert into worldpane.devices
-                     (id, world_id, device_token_hash, firmware_version, paired_at, created_at)
-                   values (%s, %s, %s, %s, %s, %s)""",
-                (device.id, device.world_id, device.device_token_hash, device.firmware_version,
-                 device.created_at, device.created_at),
-            )
+            self._insert_device(conn, device)
+
+    @staticmethod
+    def _insert_device(conn, device: Device) -> None:
+        conn.execute(
+            """insert into worldpane.devices
+                 (id, world_id, device_token_hash, firmware_version, paired_at, created_at)
+               values (%s, %s, %s, %s, %s, %s)""",
+            (device.id, device.world_id, device.device_token_hash, device.firmware_version,
+             device.created_at, device.created_at),
+        )
 
     @staticmethod
     def _device(r: dict[str, Any]) -> Device:
@@ -420,24 +425,29 @@ class PostgresRepository:
             ).fetchone()
         return self._code(r) if r else None
 
-    def consume_pairing_code(self, code_id: str, now: datetime) -> PairingCode:
-        with self._pool.connection() as conn, conn.transaction():
-            r = conn.execute(
-                """update worldpane.pairing_codes
-                      set used_count = used_count + 1,
-                          consumed_at = case when used_count + 1 >= max_uses then %s end,
-                          consumed_reason = case when used_count + 1 >= max_uses
-                                                 then 'exhausted'::worldpane.pairing_consumed_reason end
-                    where id = %s and consumed_at is null and expires_at > %s and used_count < max_uses
-                    returning *""",
-                (now, code_id, now),
-            ).fetchone()
-            if r is not None:
-                return self._code(r)
+    def redeem_pairing_code(self, code_id: str, device: Device, now: datetime) -> PairingCode:
+        with self._pool.connection() as conn:
+            with conn.transaction():
+                r = conn.execute(
+                    """update worldpane.pairing_codes
+                          set used_count = used_count + 1,
+                              consumed_at = case when used_count + 1 >= max_uses then %s end,
+                              consumed_reason = case when used_count + 1 >= max_uses
+                                                     then 'exhausted'::worldpane.pairing_consumed_reason end
+                        where id = %s and consumed_at is null and expires_at > %s and used_count < max_uses
+                        returning *""",
+                    (now, code_id, now),
+                ).fetchone()
+                if r is not None:
+                    # Same transaction: if this insert fails, the use above is rolled back.
+                    self._insert_device(conn, device)
+                    return self._code(r)
             row = conn.execute(
                 "select * from worldpane.pairing_codes where id = %s", (code_id,)
             ).fetchone()
-            if row is None or row["consumed_reason"] in ("exhausted", "revoked"):
+            if row is None or row["consumed_reason"] in ("exhausted", "revoked") or (
+                row["used_count"] >= row["max_uses"]
+            ):
                 raise PairingCodeRejected("exhausted")
             if row["consumed_at"] is None:
                 conn.execute(

@@ -66,9 +66,12 @@ class InMemoryRepository:
                 raise KeyError(character.world_id)
             self._characters[character.world_id].append(copy.deepcopy(character))
 
-    def list_characters(self, world_id: str) -> list[Character]:
+    def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         with self._lock:
-            chars = self._characters.get(world_id, [])
+            chars = [
+                c for c in self._characters.get(world_id, [])
+                if include_archived or c.archived_at is None
+            ]
             return [copy.deepcopy(c) for c in sorted(chars, key=lambda c: (c.sort_order, c.id))]
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
@@ -129,13 +132,14 @@ class InMemoryRepository:
             code_id = self._code_by_hash.get(code_hash)
             return copy.deepcopy(self._codes[code_id]) if code_id else None
 
-    def consume_pairing_code(self, code_id: str, now: datetime) -> PairingCode:
+    def redeem_pairing_code(self, code_id: str, device: Device, now: datetime) -> PairingCode:
         with self._lock:
             code = self._codes[code_id]
             if code.is_expired(now):
                 raise PairingCodeRejected("expired")
             if code.is_exhausted():
                 raise PairingCodeRejected("exhausted")
+            self.add_device(device)
             code.used_count += 1
             return copy.deepcopy(code)
 
@@ -143,6 +147,14 @@ class InMemoryRepository:
     def add_device_input(self, item: DeviceInput) -> None:
         with self._lock:
             self._inputs.append(copy.deepcopy(item))
+
+    def archive_character(self, character_id: str, at: datetime) -> None:
+        """Not part of the Protocol; soft delete for tests/debugging."""
+        with self._lock:
+            for chars in self._characters.values():
+                for c in chars:
+                    if c.id == character_id:
+                        c.archived_at = at
 
     def list_device_inputs(self, world_id: str) -> list[DeviceInput]:
         """Not part of the Protocol; handy for tests/debugging."""

@@ -129,8 +129,13 @@ class WorldService:
         if local_date > today:
             raise ServiceError(422, "date_in_future", "History is only available up to today (World timezone)")
         tz = ZoneInfo(world.timezone)
-        characters = self.repo.list_characters(world.id)
-        events = self.ensure_plan(world, characters, local_date)
+        events = self.ensure_plan(world, self.repo.list_characters(world.id), local_date)
+        # Archived characters stay in history for the days they took part in (spec §17).
+        involved = {cid for e in events for cid in e.participant_ids}
+        characters = [
+            c for c in self.repo.list_characters(world.id, include_archived=True)
+            if c.archived_at is None or c.id in involved
+        ]
         # History = what has happened. For today, hide events that have not started yet.
         events = [e for e in events if e.start_at <= now]
 
@@ -154,14 +159,13 @@ class WorldService:
             self.repo.touch_device(device.id, self.clock.now())
         return device
 
-    def _register_device(self, world_id: str, firmware_version: str | None) -> schemas.DeviceCredentials:
+    def _new_device(self, world_id: str, firmware_version: str | None) -> tuple[Device, schemas.DeviceCredentials]:
         token = generate_device_token()
         device = Device(
             id=new_id(), world_id=world_id, device_token_hash=hash_device_token(token),
             created_at=self.clock.now(), firmware_version=firmware_version,
         )
-        self.repo.add_device(device)
-        return schemas.DeviceCredentials(device_id=device.id, world_id=world_id, device_token=token)
+        return device, schemas.DeviceCredentials(device_id=device.id, world_id=world_id, device_token=token)
 
     def issue_pairing_code(self, world_id: str, max_uses: int | None = None,
                            code: str | None = None) -> schemas.PairingCodeOut:
@@ -191,13 +195,15 @@ class WorldService:
         pc = self.repo.get_pairing_code_by_hash(hash_pairing_code(code, self.settings.pairing_code_secret))
         if pc is None:
             raise ServiceError(400, "invalid_pairing_code", "Pairing code is not valid")
+        device, creds = self._new_device(pc.world_id, firmware_version)
         try:
-            self.repo.consume_pairing_code(pc.id, self.clock.now())
+            # One transaction: the code is only used up if the device row is created too.
+            self.repo.redeem_pairing_code(pc.id, device, self.clock.now())
         except PairingCodeRejected as exc:
             if exc.reason == "expired":
                 raise ServiceError(400, "pairing_code_expired", "Pairing code has expired") from exc
             raise ServiceError(400, "pairing_code_exhausted", "Pairing code has already been used") from exc
-        return self._register_device(pc.world_id, firmware_version)
+        return creds
 
     def create_world(self, body: schemas.CreateWorldIn) -> schemas.CreateWorldOut:
         now = self.clock.now()
@@ -207,7 +213,8 @@ class WorldService:
             self.repo, world_id=new_id(), name=body.name, timezone=tz_name,
             created_at=now, start_date=start,
         )
-        creds = self._register_device(world.id, body.firmware_version)
+        device, creds = self._new_device(world.id, body.firmware_version)
+        self.repo.add_device(device)
         pairing = self.issue_pairing_code(world.id, body.pairing_max_uses)
         return schemas.CreateWorldOut(world_id=world.id, device=creds, pairing=pairing)
 

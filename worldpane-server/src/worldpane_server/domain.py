@@ -66,6 +66,8 @@ class Character:
     display_name: str
     profile: CharacterProfile
     sort_order: int = 0
+    # Soft delete: archived characters get no new plans but keep their history (spec §17).
+    archived_at: datetime | None = None
 
 
 @dataclass

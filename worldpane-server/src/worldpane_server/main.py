@@ -20,6 +20,7 @@ from .seed import (
     create_world_with_defaults,
     official_default_characters,
 )
+from .security import hash_pairing_code
 from .services import ServiceError, WorldService
 from .simulation.provider import SimulationProvider, build_provider
 
@@ -46,9 +47,18 @@ def seed_demo(service: WorldService) -> str:
             start_date=DEMO_START_DATE,
             characters=official_default_characters(DEMO_WORLD_ID, DEMO_CHARACTER_IDS),
         )
-    out = service.issue_pairing_code(
-        DEMO_WORLD_ID, max_uses=10, code=service.settings.demo_pairing_code or None
-    )
+    fixed = service.settings.demo_pairing_code or None
+    try:
+        out = service.issue_pairing_code(DEMO_WORLD_ID, max_uses=10, code=fixed)
+    except ValueError:
+        # Restart with a persistent DB: the fixed demo code may still be live. Reuse it if it
+        # belongs to the demo world; never hijack a code another world is using.
+        live = service.repo.get_pairing_code_by_hash(
+            hash_pairing_code(fixed or "", service.settings.pairing_code_secret)
+        )
+        if live is None or live.world_id != DEMO_WORLD_ID:
+            raise
+        return fixed or ""
     return out.pairing_code
 
 
