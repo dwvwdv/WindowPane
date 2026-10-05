@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
+from functools import lru_cache
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from worldpane_core.catalog import official_definitions
 
 from . import __version__
@@ -27,6 +30,13 @@ from .services import ServiceError, WorldService
 from .simulation.provider import SimulationProvider, build_provider
 
 log = logging.getLogger("worldpane_server")
+
+
+@lru_cache(maxsize=4)
+def _demo_document(start: date, timezone: str) -> str:
+    from .demo import demo_payload, page_document
+
+    return page_document(demo_payload(start, 7, timezone))
 
 
 def build_repository(settings: Settings) -> Repository:
@@ -105,6 +115,13 @@ def create_app(
         return {"status": "ok"}
 
     app.include_router(router)
+
+    @app.get("/demo", include_in_schema=False, response_class=HTMLResponse)
+    def demo_page() -> HTMLResponse:
+        # A week of the demo world from today (World-local), plus a live mode that pairs with
+        # this server. Computed in memory; it never touches the configured repository.
+        today = service.clock.now().astimezone(ZoneInfo(settings.default_timezone)).date()
+        return HTMLResponse(_demo_document(max(today, DEMO_START_DATE), settings.default_timezone))
 
     # A database created from migrations only (e.g. `supabase db push`, no seed.sql) still gets
     # the official catalog and profile templates as global rows; existing rows are kept as-is.

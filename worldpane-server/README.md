@@ -56,6 +56,8 @@ WORLDPANE_PAIRING_CODE_SECRET=... uvicorn worldpane_server.main:app
 
 Swagger UI：<http://127.0.0.1:8000/docs>
 
+瀏覽器 Demo：<http://127.0.0.1:8000/demo>。它會用和 API 相同的模擬，回放示範 World 從今天起一週的生活，也可以切到「連線後端」模式：輸入配對碼或建立新 World，像真正的裝置一樣輪詢 `/device/state`。要產生不需要後端的單檔版本，執行 `python scripts/build_demo_html.py -o demo.html`。
+
 ### 設定（環境變數，前綴 `WORLDPANE_`，或 `.env`；參考 `.env.example`）
 
 | 變數 | 預設 | 說明 |
