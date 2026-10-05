@@ -167,6 +167,7 @@ def generate_temporary(
                         overlay_base=True,
                         move_window=(block.start, latest),
                         metadata={"base_type": block.type},
+                        cooldown=cooldown,
                     )
                 )
                 break
@@ -258,6 +259,7 @@ def generate_leisure(
                     overlay_base=False,
                     move_window=(move_lo, move_hi) if move_hi >= move_lo else None,
                     metadata={},
+                    cooldown=int(ev.get("cooldown_min", 0)),
                 )
             )
             last_end[ev["type"]] = end
@@ -391,6 +393,7 @@ def generate_shared(
                     participants=tuple(group),
                     overlay_base=False,
                     move_window=(ws, we - duration),
+                    cooldown=cooldown,
                     metadata={
                         "relationship_required": rule.get("relationship_required"),
                         "min_participants": min_p,

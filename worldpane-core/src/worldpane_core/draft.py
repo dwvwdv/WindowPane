@@ -27,6 +27,8 @@ class Draft:
     # 衝突時可移動的 start 範圍 (earliest_start, latest_start)；None 表示不可移動
     move_window: tuple[int, int] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    # 同 type 事件（共用參與者）之間至少相隔的分鐘數；衝突解決移動事件時也必須遵守
+    cooldown: int = 0
     seq: int = 0  # 生成順序（衝突解決時同優先級的 tie-breaker）
 
     @property

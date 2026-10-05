@@ -4,6 +4,7 @@
 - 與已接受的較高 / 同優先事件 overlap → 嘗試在 move_window 內移動（由近到遠搜尋）。
 - 無法移動 → 取消。
 - 個人休閒與共同事件不可覆蓋 Base Schedule；用餐與上班/上課 temporary event 可覆蓋 Base。
+- 移動後仍須遵守同 type 事件的 cooldown。
 結果保證：每個角色的 foreground 事件互不重疊，不會產生矛盾的 Current State。
 本模組不使用 RNG，因此結果完全由輸入決定。
 """
@@ -19,7 +20,13 @@ from .timeutil import fmt_hhmm, overlaps
 def _fits(d: Draft, start: int, accepted: list[Draft], base: list[Draft]) -> bool:
     end = start + d.duration
     for other in accepted:
-        if set(d.participants) & set(other.participants) and overlaps(start, end, other.start, other.end):
+        if not set(d.participants) & set(other.participants):
+            continue
+        if overlaps(start, end, other.start, other.end):
+            return False
+        # 同 type 事件須遵守 cooldown（含被移動過的事件）
+        gap = max(d.cooldown, other.cooldown) if other.type == d.type and other.kind == d.kind else 0
+        if gap and start < other.end + gap and other.start < end + gap:
             return False
     if not d.overlay_base:
         for b in base:

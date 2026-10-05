@@ -5,7 +5,7 @@ import pytest
 from worldpane_core import demo_world, generate_daily_plan, plan_day
 from worldpane_core.models import World
 
-from helpers import assert_no_overlap, base, days
+from helpers import assert_no_overlap, base, days, foreground
 
 
 @pytest.mark.parametrize("n", [1, 2, 3, 5, 8])
@@ -93,3 +93,29 @@ def test_events_are_timezone_aware_in_world_timezone():
     for e in generate_daily_plan(world, chars, rels, date(2026, 10, 5)):
         assert e.start_at.tzinfo is not None
         assert e.start_at.utcoffset().total_seconds() == 8 * 3600
+
+
+def test_cooldown_holds_after_conflict_resolution():
+    """Events moved by the conflict resolver still respect their type's cooldown."""
+    from worldpane_core import demo_world, plan_day
+
+    world, chars, rels = demo_world(5)
+    cooldowns = {}
+    for c in chars:
+        for section in ("temporary", "leisure"):
+            for ev in c.profile.event_config.get(section, {}).get("events", []):
+                cooldowns[(c.id, ev["type"])] = int(ev.get("cooldown_min", 0))
+    for d in days(date(2026, 1, 1), 60):
+        events = plan_day(world, chars, rels, d).events
+        for c in chars:
+            mine = sorted(
+                (e for e in foreground(events, c.id) if e.kind in ("temporary", "leisure")),
+                key=lambda e: e.start_at,
+            )
+            last_end = {}
+            for e in mine:
+                gap = cooldowns.get((c.id, e.type), 0)
+                prev = last_end.get(e.type)
+                if prev is not None:
+                    assert (e.start_at - prev).total_seconds() / 60 >= gap, f"{d} {c.id} {e.type}"
+                last_end[e.type] = e.end_at
