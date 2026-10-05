@@ -92,9 +92,18 @@ seed 來源：`python scripts/gen_seed_sql.py > ../supabase/seed.sql`（`--check
 
 ## 設定值（TBD）
 
-所有機率、權重、頻率、cooldown、休閒事件時段皆集中在
-[`src/worldpane_core/defaults.py`](src/worldpane_core/defaults.py)，標記 `# TBD §34` 者為 **placeholder**，
-正式數值待需求方定案。Engine 不 hard-code 任何數值。
+規格 §34 未定案的機率、權重、頻率、cooldown、休閒時段都是資料，正式環境以 DB 為準
+（`event_definitions` / `profile_event_pools` / `character_profiles.*_config` / `worlds.shared_event_config`）。
+[`src/worldpane_core/defaults.py`](src/worldpane_core/defaults.py) 只是官方預設與 `seed.sql` 的來源，
+標記 `# TBD §34` 者為 **placeholder**，正式數值待需求方定案。Engine 不 hard-code 任何數值。
+
+從 DB 讀進來的設定一律先經 `catalog.build_event_config` / `build_shared_event_config` 驗證：
+事件定義（套用所有覆寫後）、巢狀生成設定（`leisure.windows`、`gap_min/gap_max`、
+`attempts_per_block`、`trigger_probability`、shared 的 `attempts` / `slot_step_min` / `max_slot_tries`）
+不合法時交給 `on_invalid` 回報，事件略過、設定改用預設值，不會讓整個 World 的計畫產生失敗。
+
+Cooldown 規則：個人事件（temporary / leisure）只跟同一角色的同類事件比較；
+共同事件的 cooldown 是整個 World 共用，即使參與者不同也要遵守。衝突解決移動事件時同樣檢查。
 
 ## 檔案結構
 

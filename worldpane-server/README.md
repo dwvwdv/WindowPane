@@ -213,3 +213,6 @@ src/worldpane_server/
 - `POST /world` 不需認證，任何人都能建立 World；上線前需評估（例如 firmware 簽章、限流）。
 - `device/input` V1 只記錄，不影響模擬。
 - 尚未提供 token 撤銷、裝置解綁、Device Preference API。
+- 假日只有週末；國定假日行事曆（core 的 `World.holiday_dates`）尚未存進 DB。
+- 沒有睡覺事件，夜間顯示 idle。
+- 沒有 CI，測試需在本機執行。

@@ -8,6 +8,13 @@
 
 ## 版本進展
 
+### 2026-10-05 — Phase 1–2 Backend 實作完成
+
+- `worldpane-core`（Simulation Core）、`worldpane-server`（FastAPI Display API）、`supabase/`（schema）已合併。
+- §34 TBD 數值與所有事件定義存在 DB，可直接調整，新增事件只需新增資料。
+- Docker 一鍵部署（預設接 Supabase）與瀏覽器 Demo（`/demo`）。
+- 實作狀態與尚未完成的項目見 repo 根目錄 `README.md`。
+
 ### 2026-10-05 — Worldpane 命名與多人化
 
 - 正式命名：**窗間 / Worldpane**。
@@ -1100,6 +1107,15 @@ POST /api/v1/device/pair
 ```
 
 使用 Pairing Code 綁定 World。
+
+---
+
+```http
+POST /api/v1/world
+POST /api/v1/world/pairing-codes
+```
+
+第一台裝置建立 World（回傳該裝置的 token 與給其他裝置用的 Pairing Code）；已綁定的裝置可再發一組 Pairing Code 邀請其他裝置（見 §22）。
 
 ---
 
