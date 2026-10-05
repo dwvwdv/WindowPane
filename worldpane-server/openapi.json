@@ -1,0 +1,867 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Worldpane API",
+    "description": "Worldpane (窗間) backend. Devices poll `GET /api/v1/device/state` (~15 s) with `If-None-Match`; the Backend is the single source of truth for World state.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/device/state": {
+      "get": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Current semantic state of the World this device is bound to",
+        "operationId": "get_device_state_api_v1_device_state_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "if-none-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceState"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the current ETag)"
+          },
+          "401": {
+            "description": "Missing or invalid device token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/world/history": {
+      "get": {
+        "tags": [
+          "world"
+        ],
+        "summary": "Per-character event history for one World-local date",
+        "operationId": "get_world_history_api_v1_world_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "YYYY-MM-DD in the World's timezone",
+              "title": "Date"
+            },
+            "description": "YYYY-MM-DD in the World's timezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed date or date in the future"
+          },
+          "401": {
+            "description": "Missing or invalid device token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/input": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Button press / local interaction from the device",
+        "operationId": "post_device_input_api_v1_device_input_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceInputIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceInputAccepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid device token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/device/pair": {
+      "post": {
+        "tags": [
+          "pairing"
+        ],
+        "summary": "Bind a new device to a World using a pairing code (unauthenticated)",
+        "operationId": "post_device_pair_api_v1_device_pair_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCredentials"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_pairing_code | pairing_code_expired | pairing_code_exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/world": {
+      "post": {
+        "tags": [
+          "pairing"
+        ],
+        "summary": "Create a World (first device flow): returns the creator's token and a pairing code",
+        "operationId": "post_world_api_v1_world_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorldIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateWorldOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/world/pairing-codes": {
+      "post": {
+        "tags": [
+          "pairing"
+        ],
+        "summary": "Issue a new pairing code for this device's World (invite another device)",
+        "operationId": "post_pairing_code_api_v1_world_pairing_codes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingCodeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingCodeOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid device token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CharacterHistory": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "appearance": {
+            "type": "string",
+            "title": "Appearance"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "appearance",
+          "display_name",
+          "events"
+        ],
+        "title": "CharacterHistory"
+      },
+      "CharacterState": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "appearance": {
+            "type": "string",
+            "title": "Appearance",
+            "description": "Appearance key; the device maps it to local assets."
+          },
+          "scene": {
+            "type": "string",
+            "title": "Scene"
+          },
+          "activity": {
+            "type": "string",
+            "title": "Activity"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "World-local ISO 8601 with offset."
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "appearance",
+          "scene",
+          "activity",
+          "started_at",
+          "ends_at"
+        ],
+        "title": "CharacterState"
+      },
+      "CreateWorldIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "default": "My World"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone",
+            "description": "IANA tz; defaults to Asia/Taipei."
+          },
+          "pairing_max_uses": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pairing Max Uses"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firmware Version"
+          }
+        },
+        "type": "object",
+        "title": "CreateWorldIn"
+      },
+      "CreateWorldOut": {
+        "properties": {
+          "world_id": {
+            "type": "string",
+            "title": "World Id"
+          },
+          "device": {
+            "$ref": "#/components/schemas/DeviceCredentials",
+            "description": "Credentials for the creating (first) device."
+          },
+          "pairing": {
+            "$ref": "#/components/schemas/PairingCodeOut",
+            "description": "Code for additional devices to join this World."
+          }
+        },
+        "type": "object",
+        "required": [
+          "world_id",
+          "device",
+          "pairing"
+        ],
+        "title": "CreateWorldOut"
+      },
+      "DeviceCredentials": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id"
+          },
+          "world_id": {
+            "type": "string",
+            "title": "World Id"
+          },
+          "device_token": {
+            "type": "string",
+            "title": "Device Token",
+            "description": "Shown once. Send as `Authorization: Bearer <token>`."
+          },
+          "token_type": {
+            "type": "string",
+            "const": "Bearer",
+            "title": "Token Type",
+            "default": "Bearer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_id",
+          "world_id",
+          "device_token"
+        ],
+        "title": "DeviceCredentials"
+      },
+      "DeviceInputAccepted": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "const": true,
+            "title": "Accepted",
+            "default": true
+          },
+          "input_id": {
+            "type": "string",
+            "title": "Input Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_id"
+        ],
+        "title": "DeviceInputAccepted"
+      },
+      "DeviceInputIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "title": "Type"
+          },
+          "button": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]{1,16}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Button"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "DeviceInputIn",
+        "example": {
+          "button": "A",
+          "type": "button_press"
+        }
+      },
+      "DeviceState": {
+        "properties": {
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Server Time"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "description": "Bumps whenever anything in `characters` changes."
+          },
+          "world_id": {
+            "type": "string",
+            "title": "World Id"
+          },
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/CharacterState"
+            },
+            "type": "array",
+            "title": "Characters",
+            "description": "1..N characters, stable order."
+          }
+        },
+        "type": "object",
+        "required": [
+          "server_time",
+          "revision",
+          "world_id",
+          "characters"
+        ],
+        "title": "DeviceState",
+        "example": {
+          "characters": [
+            {
+              "activity": "reading",
+              "appearance": "xiaobai",
+              "ends_at": "2026-10-05T19:03:00+08:00",
+              "id": "chr_a",
+              "scene": "home_living_room",
+              "started_at": "2026-10-05T18:31:00+08:00"
+            }
+          ],
+          "revision": 18291,
+          "server_time": "2026-10-05T18:42:10+08:00",
+          "world_id": "wld_demo"
+        }
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HistoryEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "scene": {
+            "type": "string",
+            "title": "Scene"
+          },
+          "activity": {
+            "type": "string",
+            "title": "Activity"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "participants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Participants",
+            "description": "All participant character ids (2..N if shared)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "scene",
+          "activity",
+          "started_at",
+          "ends_at",
+          "participants"
+        ],
+        "title": "HistoryEvent"
+      },
+      "PairIn": {
+        "properties": {
+          "pairing_code": {
+            "type": "string",
+            "pattern": "^\\d{6}$",
+            "title": "Pairing Code"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firmware Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pairing_code"
+        ],
+        "title": "PairIn",
+        "example": {
+          "pairing_code": "824917"
+        }
+      },
+      "PairingCodeIn": {
+        "properties": {
+          "max_uses": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Uses"
+          }
+        },
+        "type": "object",
+        "title": "PairingCodeIn"
+      },
+      "PairingCodeOut": {
+        "properties": {
+          "pairing_code": {
+            "type": "string",
+            "title": "Pairing Code"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "max_uses": {
+            "type": "integer",
+            "title": "Max Uses"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pairing_code",
+          "expires_at",
+          "max_uses"
+        ],
+        "title": "PairingCodeOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorldHistory": {
+        "properties": {
+          "world_id": {
+            "type": "string",
+            "title": "World Id"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/CharacterHistory"
+            },
+            "type": "array",
+            "title": "Characters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "world_id",
+          "date",
+          "timezone",
+          "characters"
+        ],
+        "title": "WorldHistory"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Device token from /device/pair or POST /world",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
