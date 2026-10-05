@@ -81,3 +81,41 @@ def test_shared_event_displaces_lower_priority_but_not_meals():
         for s in (e for e in events if e.kind == "shared"):
             for m in (e for e in events if e.kind == "meal" and set(e.participants) & set(s.participants)):
                 assert not (s.start_at < m.end_at and m.start_at < s.end_at)
+
+
+def _shared_draft(type_, start, participants, cooldown=120, seq=0, move_window=None):
+    from worldpane_core.draft import Draft
+    from worldpane_core.models import EventKind, Priority
+
+    return Draft(
+        kind=EventKind.SHARED, type=type_, label=type_, scene="living_room", location="home",
+        activity="chat", start=start, end=start + 30, priority=Priority.SHARED,
+        participants=tuple(participants), cooldown=cooldown, seq=seq, move_window=move_window,
+    )
+
+
+def test_shared_cooldown_applies_across_disjoint_groups():
+    from worldpane_core.conflicts import resolve_conflicts
+
+    first = _shared_draft("chat", 600, ["a", "b"], seq=0)
+    # 參與者完全不同，但同 type 的共同事件 cooldown 是 World 共用的
+    second = _shared_draft("chat", 660, ["c", "d"], seq=1, move_window=(600, 1000))
+    kept, cancelled = resolve_conflicts([first, second])
+    assert not cancelled
+    moved = next(d for d in kept if d.participants == ("c", "d"))
+    assert moved.start >= first.end + 120 or moved.end + 120 <= first.start
+
+
+def test_personal_cooldown_still_scoped_to_shared_participants():
+    from worldpane_core.conflicts import _fits
+    from worldpane_core.draft import Draft
+    from worldpane_core.models import EventKind, Priority
+
+    def leisure(start, who):
+        return Draft(
+            kind=EventKind.LEISURE, type="game", label="game", scene="bedroom", location="home",
+            activity="game", start=start, end=start + 30, priority=Priority.LEISURE,
+            participants=(who,), cooldown=120,
+        )
+
+    assert _fits(leisure(640, "b"), 640, [leisure(600, "a")], [])

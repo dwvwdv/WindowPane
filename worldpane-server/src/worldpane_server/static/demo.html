@@ -370,13 +370,16 @@ async function api(path, opts = {}) {
 }
 
 // World-local "now", taken from the last server_time (it carries the World's UTC offset),
-// advanced by the time elapsed since that response. The browser's own timezone never matters.
-let serverClock = null, liveTz = "";
+// advanced by the time elapsed since that response. The browser's own timezone never matters,
+// and the date rolls over at the World's midnight.
+let serverClock = null, liveTz = "", historyDate = null, historyLoading = null;
 function liveNow() {
   if (!serverClock) return null;
   const t = serverClock.iso;
-  const base = Number(t.slice(11, 13)) * 60 + Number(t.slice(14, 16));
-  return { date: t.slice(0, 10), minute: Math.min(1439, base + (Date.now() - serverClock.at) / 60000) };
+  const off = /([+-])(\d\d):?(\d\d)$/.exec(t);
+  const offMin = off ? (off[1] === "-" ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3])) : 0;
+  const local = new Date(Date.parse(t.replace(/(\.\d{3})\d+/, "$1")) + (Date.now() - serverClock.at) + offMin * 60000);
+  return { date: local.toISOString().slice(0, 10), minute: local.getUTCHours() * 60 + local.getUTCMinutes() + local.getUTCSeconds() / 60 };
 }
 const minOfIso = (iso, date) => {
   const [d, t] = [iso.slice(0, 10), iso.slice(11, 16)];
@@ -384,10 +387,18 @@ const minOfIso = (iso, date) => {
   return d < date ? 0 : d > date ? 1440 : m;
 };
 
-async function loadHistory(date) {
+function loadHistory(date) {
+  if (historyLoading && historyLoading.date === date) return historyLoading.promise;
+  const promise = fetchHistory(date).finally(() => { if (historyLoading?.promise === promise) historyLoading = null; });
+  historyLoading = { date, promise };
+  return promise;
+}
+
+async function fetchHistory(date) {
   const r = await api(`/world/history?date=${date}`);
   if (!r.ok) return;
   const h = await r.json();
+  historyDate = date;
   liveTz = h.timezone;
   liveChars = h.characters.map((c) => ({ id: c.id, name: c.display_name, appearance: c.appearance }));
   liveBars = {};
@@ -402,6 +413,10 @@ async function loadHistory(date) {
 function drawLive() {
   if (!liveState) return;
   const { minute: m, date } = liveNow();
+  // 跨過 World 的午夜：換成新的一天的時間軸
+  if (historyDate && date !== historyDate) {
+    loadHistory(date).then(() => { if (historyDate === date) drawLive(); }, () => {});
+  }
   const states = {};
   for (const c of liveState.characters) {
     states[c.id] = { scene: c.scene, activity: c.activity,
@@ -424,7 +439,7 @@ async function poll() {
       etag = r.headers.get("ETag");
       liveState = await r.json();
       serverClock = { iso: liveState.server_time, at: Date.now() };
-      await loadHistory(liveState.server_time.slice(0, 10));
+      await loadHistory(liveNow().date);
       liveStatus(`${new Date().toLocaleTimeString()}　200 OK　ETag ${etag}`);
     } else {
       liveStatus(`輪詢失敗：HTTP ${r.status}`, true);

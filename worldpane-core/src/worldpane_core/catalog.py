@@ -128,6 +128,17 @@ _CODE = re.compile(r"[a-z0-9_]{1,64}")
 _LOCATION = re.compile(r"[A-Za-z0-9_]{1,64}")
 
 
+def _window_ok(w: Any) -> bool:
+    """``["HH:MM", "HH:MM"]`` 且 start < end。"""
+    try:
+        if not (isinstance(w, (list, tuple)) and len(w) == 2 and all(isinstance(t, str) for t in w)):
+            return False
+        start, end = parse_window(w)
+        return start < end
+    except (TypeError, ValueError, AttributeError, IndexError, KeyError):
+        return False
+
+
 def _validate_effective(ev: Mapping[str, Any], category: str) -> list[str]:
     errors: list[str] = []
     key = ev.get("type", "?")
@@ -163,13 +174,7 @@ def _validate_effective(ev: Mapping[str, Any], category: str) -> list[str]:
     if category in ("leisure", "shared") and not windows:
         errors.append(f"{key}: allowed_time required for {category} events")
     for w in windows or []:
-        try:
-            if not (isinstance(w, (list, tuple)) and len(w) == 2 and all(isinstance(t, str) for t in w)):
-                raise ValueError
-            start, end = parse_window(w)
-            if start >= end:
-                raise ValueError
-        except (TypeError, ValueError, AttributeError, IndexError, KeyError):
+        if not _window_ok(w):
             errors.append(f"{key}: bad allowed_time window {w!r}")
     if category == "shared":
         min_p = ev.get("min_participants", 2)
@@ -192,6 +197,69 @@ def _report(message: str, on_invalid: OnInvalid | None) -> None:
     if on_invalid is None:
         raise ValueError(message)
     on_invalid(message)
+
+
+def _non_negative_int(v: Any) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+
+def _positive_int(v: Any) -> bool:
+    return _non_negative_int(v) and v > 0
+
+
+def _probability(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1
+
+
+# Generator 讀取的巢狀設定值 → 驗證函式。不合法的值回報後移除，Generator 改用其內建預設值。
+_SETTING_CHECKS: dict[str, dict[str, tuple[Callable[[Any], bool], str]]] = {
+    "temporary": {
+        "attempts_per_block": (_non_negative_int, "an integer >= 0"),
+        "trigger_probability": (_probability, "a number between 0 and 1"),
+    },
+    "leisure": {
+        "gap_min": (_non_negative_int, "an integer >= 0"),
+        "gap_max": (_non_negative_int, "an integer >= 0"),
+    },
+    "shared": {
+        "attempts": (_non_negative_int, "an integer >= 0"),
+        "trigger_probability": (_probability, "a number between 0 and 1"),
+        "slot_step_min": (_positive_int, "an integer > 0"),
+        "max_slot_tries": (_non_negative_int, "an integer >= 0"),
+    },
+}
+
+
+def _sanitize_settings(
+    section: dict[str, Any], category: str, where: str, on_invalid: OnInvalid | None
+) -> dict[str, Any]:
+    """Drop (and report) nested generator settings that would crash or mislead the Generator."""
+    out = dict(section)
+    for name, (ok, expected) in _SETTING_CHECKS[category].items():
+        if name in out and not ok(out[name]):
+            _report(f"{where}.{name} must be {expected}; using the default", on_invalid)
+            del out[name]
+    if category == "leisure":
+        if "gap_min" in out or "gap_max" in out:
+            if out.get("gap_min", 0) > out.get("gap_max", 30):
+                _report(f"{where}.gap_min must be <= gap_max; using the defaults", on_invalid)
+                out.pop("gap_min", None)
+                out.pop("gap_max", None)
+        if "windows" in out:
+            windows = out["windows"]
+            if not isinstance(windows, Mapping):
+                _report(f"{where}.windows must be an object of context -> windows; ignoring it", on_invalid)
+                del out["windows"]
+            else:
+                kept: dict[str, Any] = {}
+                for ctx, ctx_windows in windows.items():
+                    if isinstance(ctx_windows, list) and all(_window_ok(w) for w in ctx_windows):
+                        kept[ctx] = ctx_windows
+                    else:
+                        _report(f"{where}.windows.{ctx} must be a list of [\"HH:MM\", \"HH:MM\"] windows; "
+                                "ignoring it", on_invalid)
+                out["windows"] = kept
+    return out
 
 
 def _materialize_checked(
@@ -243,6 +311,7 @@ def build_event_config(
         if not isinstance(section, Mapping):
             _report(f"event_config.{category} must be an object; using defaults", on_invalid)
             section = {}
+        section = _sanitize_settings(dict(section), category, f"event_config.{category}", on_invalid)
         cfg[category] = {**section, "events": []}
     for entry in sorted(pool, key=lambda e: (e.definition.sort_order, e.definition.key)):
         cat = entry.definition.category
@@ -271,6 +340,7 @@ def build_shared_event_config(
     if not isinstance(overrides, Mapping):
         _report("shared_event_config.overrides must be an object; ignoring it", on_invalid)
         overrides = {}
+    cfg = _sanitize_settings(cfg, "shared", "shared_event_config", on_invalid)
     cfg["rules"] = []
     for d in _ordered(definitions):
         if d.category != "shared":

@@ -13,20 +13,21 @@ from __future__ import annotations
 
 from .defaults import CONFLICT_MOVE_STEP_MIN
 from .draft import Draft
-from .models import Layer
+from .models import EventKind, Layer
 from .timeutil import fmt_hhmm, overlaps
 
 
 def _fits(d: Draft, start: int, accepted: list[Draft], base: list[Draft]) -> bool:
     end = start + d.duration
     for other in accepted:
-        if not set(d.participants) & set(other.participants):
-            continue
-        if overlaps(start, end, other.start, other.end):
-            return False
-        # 同 type 事件須遵守 cooldown（含被移動過的事件）
-        gap = max(d.cooldown, other.cooldown) if other.type == d.type and other.kind == d.kind else 0
-        if gap and start < other.end + gap and other.start < end + gap:
+        shares = bool(set(d.participants) & set(other.participants))
+        # 同 type 事件須遵守 cooldown（含被移動過的事件）。共同事件的 cooldown 是整個 World 共用
+        # （與 generate_shared 一致），即使參與者不重疊也要遵守；個人事件只看共用參與者。
+        if other.type == d.type and other.kind == d.kind and (shares or d.kind == EventKind.SHARED):
+            gap = max(d.cooldown, other.cooldown)
+            if gap and start < other.end + gap and other.start < end + gap:
+                return False
+        if shares and overlaps(start, end, other.start, other.end):
             return False
     if not d.overlay_base:
         for b in base:

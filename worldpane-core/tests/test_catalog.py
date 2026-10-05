@@ -249,3 +249,39 @@ def test_malformed_settings_sections_fall_back_to_defaults():
     shared = build_shared_event_config([1], [d for d in official_definitions() if d.category == "shared"],
                                        on_invalid=errors.append)
     assert shared["rules"]
+
+
+def test_malformed_nested_settings_are_reported_and_planning_still_runs():
+    world, chars, rels = demo_world(2)
+    errors: list[str] = []
+    bad_settings = [
+        {"leisure": {"windows": ["17:30", "23:30"]}},
+        {"leisure": {"windows": {"weekday": "17:30-23:30", "holiday": [["10:00", "22:00"]]},
+                     "gap_min": "x", "gap_max": -1},
+         "temporary": {"attempts_per_block": "3", "trigger_probability": 2}},
+        {"leisure": {"gap_min": 50, "gap_max": 10}},
+    ]
+    for bad in bad_settings:
+        new_chars = []
+        for c in chars:
+            settings, pool = split_event_config(c.profile.event_config)
+            defs = {(d.category, d.key): d for d in official_definitions()}
+            entries = [PoolEntry(defs[(cat, key)], ov) for cat, key, ov in pool]
+            cfg = build_event_config({**settings, **bad}, entries, on_invalid=errors.append)
+            new_chars.append(dataclasses.replace(c, profile=dataclasses.replace(c.profile, event_config=cfg)))
+        for d in days(START, 7):
+            plan_day(world, new_chars, rels, d)
+    assert any("windows must be an object" in e for e in errors)
+    assert any("windows.weekday" in e for e in errors)
+    assert any("gap_min must be <= gap_max" in e for e in errors)
+    assert any("trigger_probability" in e for e in errors)
+
+    shared_errors: list[str] = []
+    shared = build_shared_event_config(
+        {**shared_settings(world.shared_event_config), "attempts": "lots", "slot_step_min": 0},
+        [d for d in official_definitions() if d.category == "shared"], on_invalid=shared_errors.append,
+    )
+    assert "attempts" not in shared and "slot_step_min" not in shared
+    assert len(shared_errors) == 2
+    for d in days(START, 7):
+        plan_day(dataclasses.replace(world, shared_event_config=shared), chars, rels, d)
