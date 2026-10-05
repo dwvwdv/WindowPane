@@ -24,7 +24,7 @@ def test_openapi_paths():
 
     doc = json.loads(_load().render())
     assert set(doc["paths"]) == {
-        "/api/v1/device/state",
+        "/api/v1/world/state",
         "/api/v1/world/history",
         "/api/v1/device/input",
         "/api/v1/device/pair",

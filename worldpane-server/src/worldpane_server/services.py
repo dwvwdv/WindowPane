@@ -42,7 +42,7 @@ class ServiceError(Exception):
 
 @dataclass
 class StateResult:
-    state: schemas.DeviceState
+    state: schemas.WorldState
     etag: str
 
 
@@ -124,7 +124,7 @@ class WorldService:
             json.dumps([s.model_dump(mode="json") for s in char_states], sort_keys=True).encode()
         ).hexdigest()
         revision = self.repo.record_state_fingerprint(world.id, fingerprint)
-        state = schemas.DeviceState(
+        state = schemas.WorldState(
             server_time=now.astimezone(tz).replace(microsecond=0),
             revision=revision,
             world_id=world.id,

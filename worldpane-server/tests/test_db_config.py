@@ -119,7 +119,7 @@ def test_invalid_override_is_skipped_not_500(client, token, repo, clock):
         assert r.status_code == 200
         types = {e["type"] for c in r.json()["characters"] for e in c["events"]}
         assert "date" not in types and not types & {"slacking", "reading", "shower"}
-    assert client.get("/api/v1/device/state", headers=auth(token)).status_code == 200
+    assert client.get("/api/v1/world/state", headers=auth(token)).status_code == 200
 
 
 def test_migrations_only_database_works(settings, clock, request):
@@ -145,8 +145,8 @@ def test_migrations_only_database_works(settings, clock, request):
     created = app.post("/api/v1/world", json={"name": "Our Room"})
     assert created.status_code == 201, created.text
     mine = created.json()["device"]["device_token"]
-    assert app.get("/api/v1/device/state", headers=auth(mine)).status_code == 200
-    assert app.get("/api/v1/device/state", headers=auth(pair(app))).status_code == 200
+    assert app.get("/api/v1/world/state", headers=auth(mine)).status_code == 200
+    assert app.get("/api/v1/world/state", headers=auth(pair(app))).status_code == 200
 
 
 def test_world_definition_shadows_official_pool_entry(client, token, repo, clock):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 PROTECTED = [
-    ("get", "/api/v1/device/state", None),
+    ("get", "/api/v1/world/state", None),
     ("get", "/api/v1/world/history?date=2026-10-05", None),
     ("post", "/api/v1/device/input", {"type": "button_press", "button": "A"}),
     ("post", "/api/v1/world/pairing-codes", {}),

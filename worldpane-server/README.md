@@ -56,7 +56,7 @@ WORLDPANE_PAIRING_CODE_SECRET=... uvicorn worldpane_server.main:app
 
 Swagger UI：<http://127.0.0.1:8000/docs>
 
-瀏覽器 Demo：<http://127.0.0.1:8000/demo>。它會用和 API 相同的模擬，回放示範 World 從今天起一週的生活，也可以切到「連線後端」模式：輸入配對碼或建立新 World，像真正的裝置一樣輪詢 `/device/state`。要產生不需要後端的單檔版本，執行 `python scripts/build_demo_html.py -o demo.html`。
+瀏覽器 Demo：<http://127.0.0.1:8000/demo>。它會用和 API 相同的模擬，回放示範 World 從今天起一週的生活，也可以切到「連線後端」模式：輸入配對碼或建立新 World，像真正的裝置一樣輪詢 `/world/state`。要產生不需要後端的單檔版本，執行 `python scripts/build_demo_html.py -o demo.html`。
 
 ### 設定（環境變數，前綴 `WORLDPANE_`，或 `.env`；參考 `.env.example`）
 
@@ -82,7 +82,7 @@ Repo 中不含任何 secret。
 | `POST` | `/world` | 無 | 建立 World（第一台裝置流程），回傳該裝置的 token + 給其他裝置用的 pairing code |
 | `POST` | `/device/pair` | 無 | 用 6 碼 pairing code 綁定 World，回傳 device token（只顯示一次） |
 | `POST` | `/world/pairing-codes` | Bearer | 為目前 World 再發一組 pairing code（邀請其他裝置） |
-| `GET` | `/device/state` | Bearer | 目前 Semantic State（§19），支援 `ETag` / `If-None-Match` → `304` |
+| `GET` | `/world/state` | Bearer | 目前 Semantic State（§19），支援 `ETag` / `If-None-Match` → `304` |
 | `GET` | `/world/history?date=YYYY-MM-DD` | Bearer | 指定日期（World 時區）每個角色的事件列表 |
 | `POST` | `/device/input` | Bearer | 按鍵 / 本地操作，回 `202` |
 
@@ -112,13 +112,13 @@ curl -s -X POST $BASE/device/pair -H 'Content-Type: application/json' -d '{"pair
 TOKEN=wpd_...
 
 # 3) 取得目前狀態（poll 約 15 秒一次）
-curl -s -i $BASE/device/state -H "Authorization: Bearer $TOKEN"
+curl -s -i $BASE/world/state -H "Authorization: Bearer $TOKEN"
 # HTTP/1.1 200 OK
 # etag: "wld_demo.2"
 # {"server_time":"…","revision":2,"world_id":"…","characters":[…]}
 
 # 4) 沒有變化時帶 If-None-Match → 304（無 body）
-curl -s -o /dev/null -w '%{http_code}\n' $BASE/device/state \
+curl -s -o /dev/null -w '%{http_code}\n' $BASE/world/state \
   -H "Authorization: Bearer $TOKEN" -H 'If-None-Match: "wld_demo.2"'
 
 # 5) 歷史

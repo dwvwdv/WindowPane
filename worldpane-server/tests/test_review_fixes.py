@@ -53,7 +53,7 @@ def test_archived_character_keeps_history(client, token, repo, clock):
     after = client.get("/api/v1/world/history", params=q, headers=auth(token)).json()
     assert after == before  # 小雞毛's past days are still there
 
-    state = client.get("/api/v1/device/state", headers=auth(token)).json()
+    state = client.get("/api/v1/world/state", headers=auth(token)).json()
     assert [c["id"] for c in state["characters"]] == [DEMO_CHARACTER_IDS[0]]
 
 
@@ -61,7 +61,7 @@ def test_restart_reuses_live_fixed_demo_code(settings, repo, clock, app):
     # ``app`` already issued DEMO_CODE for the demo world; start a second process on the same data.
     second = TestClient(create_app(settings, repository=repo, clock=clock))
     assert second.app.state.demo_pairing_code == DEMO_CODE
-    assert second.get("/api/v1/device/state", headers=auth(pair(second))).status_code == 200
+    assert second.get("/api/v1/world/state", headers=auth(pair(second))).status_code == 200
 
 
 def test_archiving_before_materialisation_keeps_history(client, token, repo, clock, settings):
@@ -101,8 +101,8 @@ def test_failed_world_creation_leaves_nothing_behind(client, repo, monkeypatch):
     assert created.status_code == 201
     assert _world_count(repo) == before + 1
     mine = created.json()["device"]["device_token"]
-    assert client.get("/api/v1/device/state", headers=auth(mine)).status_code == 200
-    assert client.get("/api/v1/device/state", headers=auth(pair(client, created.json()["pairing"]["pairing_code"]))).status_code == 200
+    assert client.get("/api/v1/world/state", headers=auth(mine)).status_code == 200
+    assert client.get("/api/v1/world/state", headers=auth(pair(client, created.json()["pairing"]["pairing_code"]))).status_code == 200
 
 
 def test_blank_world_name_is_rejected(client):

@@ -140,7 +140,7 @@ label.lbl { font-size: .85rem; color: var(--muted); }
       <button class="btn" id="forget" type="button">取消配對</button>
     </div>
     <div class="status" id="livestatus">尚未配對。</div>
-    <p class="note">這個模式會像真正的裝置一樣，每 15 秒帶 If-None-Match 輪詢 <code>/api/v1/device/state</code>，時間軸則來自 <code>/api/v1/world/history</code>。需要從後端的 <code>/demo</code> 頁面開啟。</p>
+    <p class="note">這個模式會像真正的裝置一樣，每 15 秒帶 If-None-Match 輪詢 <code>/api/v1/world/state</code>，時間軸則來自 <code>/api/v1/world/history</code>。需要從後端的 <code>/demo</code> 頁面開啟。</p>
   </section>
 
   <section class="panel tl" aria-label="今日時間軸">
@@ -416,7 +416,7 @@ function drawLive() {
 async function poll() {
   if (!token) return;
   try {
-    const r = await api("/device/state", { headers: etag ? { "If-None-Match": etag } : {} });
+    const r = await api("/world/state", { headers: etag ? { "If-None-Match": etag } : {} });
     if (r.status === 401) { liveStatus("裝置 token 失效，請重新配對。", true); forget(); return; }
     if (r.status === 304) {
       liveStatus(`${new Date().toLocaleTimeString()}　304 Not Modified（沒有變化）`);

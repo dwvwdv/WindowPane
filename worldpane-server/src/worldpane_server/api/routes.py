@@ -15,16 +15,16 @@ AUTH_ERRORS = {401: {"model": schemas.ErrorResponse, "description": "Missing or 
 
 
 @router.get(
-    "/device/state",
-    response_model=schemas.DeviceState,
-    tags=["device"],
+    "/world/state",
+    response_model=schemas.WorldState,
+    tags=["world"],
     summary="Current semantic state of the World this device is bound to",
     responses={
         304: {"description": "Not modified (If-None-Match matched the current ETag)"},
         **AUTH_ERRORS,
     },
 )
-def get_device_state(
+def get_world_state(
     response: Response,
     if_none_match: str | None = Header(default=None),
     device: Device = Depends(require_device),

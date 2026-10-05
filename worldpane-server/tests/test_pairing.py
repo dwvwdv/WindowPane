@@ -31,7 +31,7 @@ def test_pair_happy_path_stores_only_token_hash(client, repo):
             ).fetchone()["t"]
         assert token not in dump and DEMO_CODE not in dump
 
-    assert client.get("/api/v1/device/state", headers=auth(token)).status_code == 200
+    assert client.get("/api/v1/world/state", headers=auth(token)).status_code == 200
 
 
 def test_create_world_then_join_with_code(client):
@@ -46,8 +46,8 @@ def test_create_world_then_join_with_code(client):
 
     first = out["device"]["device_token"]
     second = pair(client, code)
-    s1 = client.get("/api/v1/device/state", headers=auth(first)).json()
-    s2 = client.get("/api/v1/device/state", headers=auth(second)).json()
+    s1 = client.get("/api/v1/world/state", headers=auth(first)).json()
+    s2 = client.get("/api/v1/world/state", headers=auth(second)).json()
     assert s1["world_id"] == s2["world_id"] == world_id
     assert s1 == s2
 

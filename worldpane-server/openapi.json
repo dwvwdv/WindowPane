@@ -2,17 +2,17 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Worldpane API",
-    "description": "Worldpane (窗間) backend. Devices poll `GET /api/v1/device/state` (~15 s) with `If-None-Match`; the Backend is the single source of truth for World state.",
+    "description": "Worldpane (窗間) backend. Devices poll `GET /api/v1/world/state` (~15 s) with `If-None-Match`; the Backend is the single source of truth for World state.",
     "version": "0.1.0"
   },
   "paths": {
-    "/api/v1/device/state": {
+    "/api/v1/world/state": {
       "get": {
         "tags": [
-          "device"
+          "world"
         ],
         "summary": "Current semantic state of the World this device is bound to",
-        "operationId": "get_device_state_api_v1_device_state_get",
+        "operationId": "get_world_state_api_v1_world_state_get",
         "security": [
           {
             "HTTPBearer": []
@@ -42,7 +42,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceState"
+                  "$ref": "#/components/schemas/WorldState"
                 }
               }
             }
@@ -570,55 +570,6 @@
           "type": "button_press"
         }
       },
-      "DeviceState": {
-        "properties": {
-          "server_time": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Server Time"
-          },
-          "revision": {
-            "type": "integer",
-            "title": "Revision",
-            "description": "Bumps whenever anything in `characters` changes."
-          },
-          "world_id": {
-            "type": "string",
-            "title": "World Id"
-          },
-          "characters": {
-            "items": {
-              "$ref": "#/components/schemas/CharacterState"
-            },
-            "type": "array",
-            "title": "Characters",
-            "description": "1..N characters, stable order."
-          }
-        },
-        "type": "object",
-        "required": [
-          "server_time",
-          "revision",
-          "world_id",
-          "characters"
-        ],
-        "title": "DeviceState",
-        "example": {
-          "characters": [
-            {
-              "activity": "reading",
-              "appearance": "xiaobai",
-              "ends_at": "2026-10-05T19:03:00+08:00",
-              "id": "chr_a",
-              "scene": "home_living_room",
-              "started_at": "2026-10-05T18:31:00+08:00"
-            }
-          ],
-          "revision": 18291,
-          "server_time": "2026-10-05T18:42:10+08:00",
-          "world_id": "wld_demo"
-        }
-      },
       "ErrorDetail": {
         "properties": {
           "code": {
@@ -854,6 +805,55 @@
           "characters"
         ],
         "title": "WorldHistory"
+      },
+      "WorldState": {
+        "properties": {
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Server Time"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "description": "Bumps whenever anything in `characters` changes."
+          },
+          "world_id": {
+            "type": "string",
+            "title": "World Id"
+          },
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/CharacterState"
+            },
+            "type": "array",
+            "title": "Characters",
+            "description": "1..N characters, stable order."
+          }
+        },
+        "type": "object",
+        "required": [
+          "server_time",
+          "revision",
+          "world_id",
+          "characters"
+        ],
+        "title": "WorldState",
+        "example": {
+          "characters": [
+            {
+              "activity": "reading",
+              "appearance": "xiaobai",
+              "ends_at": "2026-10-05T19:03:00+08:00",
+              "id": "chr_a",
+              "scene": "home_living_room",
+              "started_at": "2026-10-05T18:31:00+08:00"
+            }
+          ],
+          "revision": 18291,
+          "server_time": "2026-10-05T18:42:10+08:00",
+          "world_id": "wld_demo"
+        }
       }
     },
     "securitySchemes": {

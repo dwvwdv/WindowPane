@@ -13,7 +13,7 @@ CHAR_KEYS = {"id", "appearance", "scene", "activity", "started_at", "ends_at"}
 
 
 def test_state_shape(client, token):
-    r = client.get("/api/v1/device/state", headers=auth(token))
+    r = client.get("/api/v1/world/state", headers=auth(token))
     assert r.status_code == 200
     body = r.json()
     assert set(body) == STATE_KEYS
@@ -43,7 +43,7 @@ def test_state_character_count_is_not_fixed(client, app, clock):
         create_world_with_defaults(service.repo, world_id=wid, name=wid, timezone="Asia/Taipei",
                                    created_at=clock.now(), start_date=NOW.date(), characters=chars)
         code = service.issue_pairing_code(wid).pairing_code
-        body = client.get("/api/v1/device/state", headers=auth(pair(client, code))).json()
+        body = client.get("/api/v1/world/state", headers=auth(pair(client, code))).json()
         assert body["world_id"] == wid
         assert [c["id"] for c in body["characters"]] == [c.id for c in chars]
 
@@ -60,7 +60,7 @@ def test_shared_event_has_same_activity_for_all(client, app, token, clock):
             break
     assert shared is not None, "demo world never schedules a shared event"
     clock.set(shared.start_at + (shared.end_at - shared.start_at) / 2)
-    chars = client.get("/api/v1/device/state", headers=auth(token)).json()["characters"]
+    chars = client.get("/api/v1/world/state", headers=auth(token)).json()["characters"]
     assert {c["activity"] for c in chars} == {shared.activity}
     assert len({(c["started_at"], c["ends_at"]) for c in chars}) == 1
 
@@ -68,8 +68,8 @@ def test_shared_event_has_same_activity_for_all(client, app, token, clock):
 def test_two_devices_see_identical_state(client):
     a, b = pair(client), pair(client)
     assert a != b
-    ra = client.get("/api/v1/device/state", headers=auth(a))
-    rb = client.get("/api/v1/device/state", headers=auth(b))
+    ra = client.get("/api/v1/world/state", headers=auth(a))
+    rb = client.get("/api/v1/world/state", headers=auth(b))
     assert ra.json() == rb.json()
     assert ra.headers["etag"] == rb.headers["etag"]
 
@@ -80,6 +80,6 @@ def test_state_spans_midnight(client, token, clock):
         h, m = map(int, hhmm.split(":"))
         day = 5 if h == 23 else 6
         clock.set(datetime(2026, 10, day, h, m, tzinfo=TPE))
-        r = client.get("/api/v1/device/state", headers=auth(token))
+        r = client.get("/api/v1/world/state", headers=auth(token))
         assert r.status_code == 200
         assert all(c["activity"] == "idle" for c in r.json()["characters"])

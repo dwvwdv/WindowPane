@@ -28,7 +28,7 @@ class CharacterState(BaseModel):
     ends_at: datetime | None
 
 
-class DeviceState(BaseModel):
+class WorldState(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
