@@ -234,10 +234,16 @@ def build_event_config(
     ``settings`` 形如 ``{"temporary": {"attempts_per_block": 3, ...}, "leisure": {"windows": ...}}``。
     每個事件在套用所有覆寫後才驗證；無效者交給 ``on_invalid`` 並略過（未提供則 raise ValueError）。
     """
+    if not isinstance(settings, Mapping):
+        _report("event_config must be an object; using defaults", on_invalid)
+        settings = {}
     cfg = copy.deepcopy(dict(settings))
     for category in ("temporary", "leisure"):
-        cfg.setdefault(category, {})
-        cfg[category]["events"] = []
+        section = cfg.get(category, {})
+        if not isinstance(section, Mapping):
+            _report(f"event_config.{category} must be an object; using defaults", on_invalid)
+            section = {}
+        cfg[category] = {**section, "events": []}
     for entry in sorted(pool, key=lambda e: (e.definition.sort_order, e.definition.key)):
         cat = entry.definition.category
         if cat not in ("temporary", "leisure") or not entry.enabled:
@@ -257,6 +263,9 @@ def build_shared_event_config(
 
     ``settings.overrides`` 可依事件 key 覆寫（例如 ``{"date": {"enabled": false}}``）。
     """
+    if not isinstance(settings, Mapping):
+        _report("shared_event_config must be an object; using defaults", on_invalid)
+        settings = {}
     cfg = copy.deepcopy(dict(settings))
     overrides = cfg.pop("overrides", {}) or {}
     if not isinstance(overrides, Mapping):

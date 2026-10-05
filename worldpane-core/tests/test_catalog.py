@@ -236,3 +236,16 @@ def test_malformed_json_shapes_are_reported_not_raised():
     shared = build_shared_event_config({"overrides": {"date": "off"}}, shared_defs, on_invalid=errors.append)
     assert "date" not in {r["type"] for r in shared["rules"]}
     assert len(errors) == 4
+
+
+def test_malformed_settings_sections_fall_back_to_defaults():
+    reading = next(d for d in official_definitions() if d.key == "reading")
+    errors: list[str] = []
+    for settings in ({"leisure": []}, {"leisure": "x", "temporary": 3}, ["not", "an", "object"]):
+        cfg = build_event_config(settings, [PoolEntry(reading)], on_invalid=errors.append)
+        assert [e["type"] for e in cfg["leisure"]["events"]] == ["reading"]
+        assert cfg["temporary"]["events"] == []
+    assert len(errors) == 4
+    shared = build_shared_event_config([1], [d for d in official_definitions() if d.category == "shared"],
+                                       on_invalid=errors.append)
+    assert shared["rules"]
