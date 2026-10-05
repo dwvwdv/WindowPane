@@ -1,0 +1,517 @@
+<title>窗間 Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Layout: one "device" bezel holding a window per character, transport + 24h timeline below. */
+:root {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --ink: #1d2433;
+  --muted: #5f6878;
+  --line: #d5d9e1;
+  --accent: #3d5a98;
+  --bezel: #2a2f3a;
+  --home: #e8a46a;
+  --school: #6aa57a;
+  --office: #6f8fb8;
+  --out: #c97b8f;
+  --idle: #b9bfca;
+  --font-display: "LXGW WenKai TC", "Kaiti TC", "STKaiti", serif;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141821; --panel: #1c2230; --ink: #e6e9ef; --muted: #9aa3b4; --line: #2e3647;
+    --accent: #8fa9e0; --bezel: #0b0e14; --idle: #4a5263; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141821; --panel: #1c2230; --ink: #e6e9ef; --muted: #9aa3b4; --line: #2e3647;
+  --accent: #8fa9e0; --bezel: #0b0e14; --idle: #4a5263; color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font-family: var(--font-display); font-size: 1.9rem; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h1 small { font-family: var(--font-body); font-size: .85rem; color: var(--muted); font-weight: 400; margin-left: .6em; letter-spacing: 0; }
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tabs button { border: 0; background: transparent; color: var(--muted); padding: 6px 14px; font: inherit; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Device */
+.device { background: var(--bezel); border-radius: 18px; padding: 14px; box-shadow: 0 10px 30px rgb(0 0 0 / .18); }
+.screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.win { position: relative; border-radius: 10px; overflow: hidden; height: 250px; color: #fff; }
+.sky { position: absolute; inset: 0; transition: background 1.2s ease; }
+.room { position: absolute; left: 0; right: 0; bottom: 0; height: 58%; transition: background .6s ease; }
+.room::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: rgb(0 0 0 / .18); }
+.figure { position: absolute; left: calc(50% - 37px); bottom: 104px; width: 74px; height: 92px; }
+.figure .head { position: absolute; left: 50%; top: 0; width: 46px; height: 46px; transform: translateX(-50%); border-radius: 50%; background: var(--c); box-shadow: inset -4px -5px 0 rgb(0 0 0 / .12); }
+.figure .body { position: absolute; left: 50%; bottom: 0; width: 64px; height: 50px; transform: translateX(-50%); border-radius: 30px 30px 10px 10px; background: var(--c); box-shadow: inset -5px -6px 0 rgb(0 0 0 / .12); }
+.figure .eye { position: absolute; top: 19px; width: 5px; height: 6px; border-radius: 3px; background: #2a2f3a; }
+.figure .eye.l { left: 26px; } .figure .eye.r { left: 42px; }
+.figure.sleep .eye { height: 2px; top: 22px; }
+.act-icon { position: absolute; right: -14px; top: -8px; font-size: 26px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .3)); }
+@media (prefers-reduced-motion: no-preference) { .figure { animation: breathe 3.4s ease-in-out infinite; } }
+@keyframes breathe { 50% { transform: translateY(-2px); } }
+.cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px; background: rgb(10 14 22 / .55); display: grid; gap: 2px; }
+.cap .who { display: flex; justify-content: space-between; gap: 8px; font-size: .8rem; opacity: .85; }
+.cap .what { font-family: var(--font-display); font-size: 1.35rem; line-height: 1.25; }
+.cap .when { font-family: var(--font-mono); font-size: .78rem; opacity: .8; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; padding: 0 7px; border-radius: 99px; background: rgb(255 255 255 / .22); font-size: .72rem; margin-left: 6px; vertical-align: 2px; }
+.devfoot { display: flex; justify-content: space-between; color: #8c95a6; font-family: var(--font-mono); font-size: .75rem; padding: 8px 4px 0; gap: 8px; flex-wrap: wrap; }
+
+/* Controls */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 12px; }
+.clock { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.clock .t { font-family: var(--font-mono); font-size: 2.2rem; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.clock .d { color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.days { display: flex; flex-wrap: wrap; gap: 6px; }
+.days button, .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: .88rem; cursor: pointer; }
+.days button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.days button .wk { color: var(--muted); font-size: .78rem; margin-left: 4px; }
+.btn.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+select, input[type="text"] { font: inherit; font-size: .9rem; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+input[type="range"] { flex: 1 1 260px; accent-color: var(--accent); }
+label.lbl { font-size: .85rem; color: var(--muted); }
+
+/* Timeline */
+.tl { display: grid; gap: 8px; }
+.tl-scroll { overflow-x: auto; }
+.tl-inner { min-width: 620px; display: grid; gap: 6px; position: relative; }
+.lane { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; }
+.lane .name { font-size: .85rem; color: var(--muted); text-align: right; }
+.track { position: relative; height: 30px; background: repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--line) calc(12.5% - 1px) 12.5%); border-radius: 6px; cursor: pointer; }
+.bar { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; background: var(--k); opacity: .9; overflow: hidden; white-space: nowrap; font-size: .7rem; color: #fff; padding: 0 3px; line-height: 24px; }
+.bar.base { top: 9px; bottom: 9px; opacity: .45; font-size: 0; }
+.bar.shared { box-shadow: inset 0 0 0 2px rgb(255 255 255 / .85); }
+.axis { display: grid; grid-template-columns: 64px 1fr; gap: 8px; }
+.axis .ticks { position: relative; height: 16px; font-family: var(--font-mono); font-size: .7rem; color: var(--muted); }
+.axis .ticks span { position: absolute; transform: translateX(-50%); }
+.playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--accent); pointer-events: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .8rem; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.note { font-size: .85rem; color: var(--muted); margin: 0; max-width: 70ch; }
+.status { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); }
+.err { color: #c0392b; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="title">窗間 Demo<small id="subtitle">示範 World 一週回放</small></h1>
+    <div class="tabs" role="group" aria-label="資料來源">
+      <button id="tab-offline" type="button" aria-pressed="true">一週回放</button>
+      <button id="tab-live" type="button" aria-pressed="false">連線後端</button>
+    </div>
+  </header>
+
+  <section class="device" aria-label="裝置畫面">
+    <div class="screens" id="screens"></div>
+    <div class="devfoot"><span id="devtime">--</span><span id="devnote">ESP32 只顯示後端給的 scene 與 activity</span></div>
+  </section>
+
+  <section class="panel" id="offline-panel">
+    <div class="clock"><span class="t" id="clock">00:00</span><span class="d" id="clockdate"></span></div>
+    <div class="days" id="days"></div>
+    <div class="row">
+      <button class="btn primary" id="play" type="button">播放</button>
+      <label class="lbl" for="speed">速度</label>
+      <select id="speed">
+        <option value="1">1 分鐘 / 秒</option>
+        <option value="10" selected>10 分鐘 / 秒</option>
+        <option value="60">1 小時 / 秒</option>
+      </select>
+      <input id="scrub" type="range" min="0" max="1439" step="1" value="480" aria-label="時間">
+    </div>
+    <p class="note">畫面和時間軸都是後端用 worldpane-core 算出的示範 World（小白 + 小雞毛），與資料庫 seed 的示範 World 是同一份計畫。點時間軸可以跳到該時刻。</p>
+  </section>
+
+  <section class="panel" id="live-panel" hidden>
+    <div class="row">
+      <label class="lbl" for="code">配對碼</label>
+      <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="6 位數" autocomplete="off">
+      <button class="btn primary" id="pair" type="button">配對</button>
+      <button class="btn" id="newworld" type="button">建立新 World</button>
+      <button class="btn" id="forget" type="button">取消配對</button>
+    </div>
+    <div class="status" id="livestatus">尚未配對。</div>
+    <p class="note">這個模式會像真正的裝置一樣，每 15 秒帶 If-None-Match 輪詢 <code>/api/v1/world/state</code>，時間軸則來自 <code>/api/v1/world/history</code>。需要從後端的 <code>/demo</code> 頁面開啟。</p>
+  </section>
+
+  <section class="panel tl" aria-label="今日時間軸">
+    <div class="tl-scroll"><div class="tl-inner" id="timeline"></div></div>
+    <div class="legend">
+      <span><i style="background:var(--home)"></i>家裡</span>
+      <span><i style="background:var(--school)"></i>學校</span>
+      <span><i style="background:var(--office)"></i>公司</span>
+      <span><i style="background:var(--out)"></i>外出</span>
+      <span>白框 = 共同事件　淡色細條 = 背景行程（上課、上班）</span>
+    </div>
+  </section>
+</div>
+
+<script>
+const DEMO = /*__DEMO_DATA__*/null;
+
+const SCENES = {
+  home_kitchen: ["廚房", "home"], home_bathroom: ["浴室", "home"], home_living_room: ["客廳", "home"],
+  home_living_room_tv: ["客廳電視前", "home"], home_bedroom: ["臥室", "home"],
+  school_classroom: ["教室", "school"], school_cafeteria: ["學校餐廳", "school"],
+  office_desk: ["辦公桌", "office"], office_pantry: ["茶水間", "office"],
+  city_cafe: ["咖啡廳", "out"], cafe_laptop: ["咖啡廳", "out"], restaurant: ["餐廳", "out"],
+  mall: ["百貨公司", "out"], basketball_court: ["籃球場", "out"],
+};
+const ACTS = {
+  eating: ["吃飯", "🍚"], shower: ["洗澡", "🛁"], slacking: ["摸魚", "🫠"], reading: ["看書", "📖"],
+  date: ["約會", "💞"], in_class: ["上課", "✏️"], gaming: ["打電動", "🎮"], phone: ["滑手機", "📱"],
+  sleeping: ["睡覺", "💤"], working: ["工作", "💻"], idle: ["發呆", "☁️"], dining_out: ["外食", "🍜"],
+  shopping: ["逛街", "🛍️"], watch_movie: ["看電影", "🎬"], basketball: ["打球", "🏀"],
+};
+const ROOM = { home: "#c9895a", school: "#5d8f6b", office: "#5b7799", out: "#a86478", idle: "#7d8494" };
+const LOOKS = { xiaobai: "#f4f1ea", xiaojimao: "#f2c94c" };
+const FALLBACK_LOOKS = ["#9ad0c2", "#f0a6ca", "#b8c0ff", "#ffd6a5"];
+const WEEK = ["", "一", "二", "三", "四", "五", "六", "日"];
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
+const pad = (n) => String(n).padStart(2, "0");
+const hhmm = (m) => `${pad(Math.floor(m / 60) % 24)}:${pad(Math.floor(m) % 60)}`;
+const sceneOf = (s) => SCENES[s] || [s || "未知場景", "home"];
+const actOf = (a) => ACTS[a] || [a || "活動", "✨"];
+const lookOf = (c, i) => LOOKS[c.appearance] || FALLBACK_LOOKS[i % FALLBACK_LOOKS.length];
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+};
+
+function sky(min) {
+  const h = min / 60;
+  if (h < 5 || h >= 20.5) return "linear-gradient(#0f1733, #26315a)";
+  if (h < 7) return "linear-gradient(#3b4a7a, #f0a37a)";
+  if (h < 16.5) return "linear-gradient(#7fb3e6, #cfe6f7)";
+  if (h < 18.5) return "linear-gradient(#5b6aa8, #f3a65f)";
+  return "linear-gradient(#232c55, #7d5b8c)";
+}
+
+/* ---------- rendering shared by both modes ---------- */
+function renderScreens(chars, states, min) {
+  const host = $("screens");
+  host.textContent = "";
+  chars.forEach((c, i) => {
+    const st = states[c.id] || { scene: "home_living_room", activity: "idle" };
+    const [sceneName, cat] = sceneOf(st.scene);
+    const [actName, icon] = actOf(st.activity);
+    const win = document.createElement("article");
+    win.className = "win";
+    win.innerHTML = `
+      <div class="sky" style="background:${sky(min)}"></div>
+      <div class="room" style="background:${st.activity === "idle" ? ROOM.idle : ROOM[cat]}"></div>
+      <div class="figure ${st.activity === "sleeping" ? "sleep" : ""}" style="--c:${lookOf(c, i)}">
+        <div class="body"></div><div class="head"></div><div class="eye l"></div><div class="eye r"></div>
+        <span class="act-icon" aria-hidden="true">${icon}</span>
+      </div>
+      <div class="cap">
+        <div class="who"><span>${esc(c.name)}</span><span>${esc(sceneName)}</span></div>
+        <div class="what">${esc(st.label || actName)}${st.shared ? '<span class="badge">一起</span>' : ""}</div>
+        <div class="when">${st.range ? esc(st.range) : "&nbsp;"}</div>
+      </div>`;
+    host.appendChild(win);
+  });
+}
+
+function renderTimeline(chars, barsByChar, min) {
+  const host = $("timeline");
+  host.textContent = "";
+  chars.forEach((c) => {
+    const lane = document.createElement("div");
+    lane.className = "lane";
+    lane.innerHTML = `<div class="name">${esc(c.name)}</div>`;
+    const track = document.createElement("div");
+    track.className = "track";
+    track.dataset.lane = c.id;
+    for (const b of barsByChar[c.id] || []) {
+      const el = document.createElement("div");
+      el.className = "bar" + (b.base ? " base" : "") + (b.shared ? " shared" : "");
+      el.style.left = (b.start / 1440 * 100) + "%";
+      el.style.width = Math.max(0.25, (Math.min(b.end, 1440) - b.start) / 1440 * 100) + "%";
+      el.style.setProperty("--k", `var(--${sceneOf(b.scene)[1]})`);
+      el.title = `${hhmm(b.start)}–${hhmm(b.end)} ${b.label}（${sceneOf(b.scene)[0]}）`;
+      el.textContent = b.label;
+      track.appendChild(el);
+    }
+    const ph = document.createElement("div");
+    ph.className = "playhead";
+    ph.style.left = (min / 1440 * 100) + "%";
+    track.appendChild(ph);
+    track.addEventListener("click", (ev) => {
+      if (mode !== "offline") return;
+      const r = track.getBoundingClientRect();
+      setMinute(Math.round((ev.clientX - r.left) / r.width * 1440));
+    });
+    lane.appendChild(track);
+    host.appendChild(lane);
+  });
+  const axis = document.createElement("div");
+  axis.className = "axis";
+  axis.innerHTML = `<div></div><div class="ticks">${[0, 3, 6, 9, 12, 15, 18, 21, 24]
+    .map((h) => `<span style="left:${h / 24 * 100}%;${h === 0 ? "transform:none" : h === 24 ? "transform:translateX(-100%)" : ""}">${pad(h)}</span>`).join("")}</div>`;
+  host.appendChild(axis);
+}
+
+function movePlayhead(min) {
+  document.querySelectorAll(".playhead").forEach((p) => { p.style.left = (min / 1440 * 100) + "%"; });
+}
+
+/* ---------- offline playback ---------- */
+let mode = "offline", dayIdx = 0, minute = 480, playing = false, speed = 10, lastTs = 0, drawnDay = -1;
+
+function offlineStates(day, min) {
+  const out = {};
+  for (const c of DEMO.characters) {
+    const seg = (day.segments[c.id] || []).find((s) => s[0] <= min && min < s[1]);
+    if (seg) {
+      out[c.id] = { scene: seg[2], activity: seg[3], label: seg[5], shared: seg[6], range: `${hhmm(seg[0])}–${hhmm(seg[1])}` };
+    } else {
+      const segs = day.segments[c.id] || [];
+      const prev = segs.filter((s) => s[1] <= min).pop();
+      const next = segs.find((s) => s[0] > min);
+      out[c.id] = { scene: "home_living_room", activity: "idle", label: "發呆",
+        range: `${prev ? hhmm(prev[1]) : "00:00"}–${next ? hhmm(next[0]) : "24:00"}` };
+    }
+  }
+  return out;
+}
+
+function offlineBars(day) {
+  const bars = {};
+  for (const c of DEMO.characters) {
+    bars[c.id] = day.events
+      .filter((e) => e.participants.includes(c.id))
+      .map((e) => ({ start: e.start, end: e.end, scene: e.scene, label: e.label, base: e.layer === "base", shared: e.participants.length > 1 }))
+      .sort((a, b) => (b.base - a.base) || (b.end - b.start) - (a.end - a.start));
+  }
+  return bars;
+}
+
+function drawOffline() {
+  const day = DEMO.days[dayIdx];
+  if (drawnDay !== dayIdx) {
+    renderTimeline(DEMO.characters, offlineBars(day), minute);
+    drawnDay = dayIdx;
+    document.querySelectorAll("#days button").forEach((b, i) => b.setAttribute("aria-pressed", String(i === dayIdx)));
+  }
+  renderScreens(DEMO.characters, offlineStates(day, minute), minute);
+  movePlayhead(minute);
+  $("clock").textContent = hhmm(minute);
+  $("clockdate").textContent = `${day.date}（週${WEEK[day.weekday]}）${day.weekday >= 6 ? "假日" : "平日"}`;
+  $("devtime").textContent = `${day.date} ${hhmm(minute)} ${DEMO.world.timezone}`;
+  $("scrub").value = Math.floor(minute);
+}
+
+function setMinute(m) { minute = Math.max(0, Math.min(1439, m)); drawOffline(); }
+
+function tick(ts) {
+  if (!playing) return;
+  if (lastTs) {
+    minute += (ts - lastTs) / 1000 * speed;
+    if (minute >= 1440) {
+      minute -= 1440;
+      dayIdx = (dayIdx + 1) % DEMO.days.length;
+    }
+    drawOffline();
+  }
+  lastTs = ts;
+  requestAnimationFrame(tick);
+}
+
+function setPlaying(on) {
+  playing = on;
+  lastTs = 0;
+  $("play").textContent = on ? "暫停" : "播放";
+  if (on) requestAnimationFrame(tick);
+}
+
+function initOffline() {
+  const days = $("days");
+  DEMO.days.forEach((d, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = `${d.date.slice(5).replace("-", "/")}<span class="wk">週${WEEK[d.weekday]}</span>`;
+    b.addEventListener("click", () => { dayIdx = i; drawOffline(); });
+    days.appendChild(b);
+  });
+  $("play").addEventListener("click", () => setPlaying(!playing));
+  $("speed").addEventListener("change", (e) => { speed = Number(e.target.value); });
+  $("scrub").addEventListener("input", (e) => setMinute(Number(e.target.value)));
+  $("title").firstChild.textContent = DEMO.world.name;
+  drawOffline();
+}
+
+/* ---------- live mode (same-origin with the backend) ---------- */
+const API = "/api/v1";
+let token = store.get("worldpane.demo.token");
+let etag = null, pollTimer = null, liveChars = [], liveBars = {}, liveState = null;
+
+function liveStatus(text, isErr) {
+  const el = $("livestatus");
+  el.textContent = text;
+  el.classList.toggle("err", !!isErr);
+}
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(API + path, Object.assign({}, opts, { headers }));
+}
+
+// World-local "now", taken from the last server_time (it carries the World's UTC offset),
+// advanced by the time elapsed since that response. The browser's own timezone never matters,
+// and the date rolls over at the World's midnight.
+let serverClock = null, liveTz = "", historyDate = null, historyLoading = null;
+function liveNow() {
+  if (!serverClock) return null;
+  const t = serverClock.iso;
+  const off = /([+-])(\d\d):?(\d\d)$/.exec(t);
+  const offMin = off ? (off[1] === "-" ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3])) : 0;
+  const local = new Date(Date.parse(t.replace(/(\.\d{3})\d+/, "$1")) + (Date.now() - serverClock.at) + offMin * 60000);
+  return { date: local.toISOString().slice(0, 10), minute: local.getUTCHours() * 60 + local.getUTCMinutes() + local.getUTCSeconds() / 60 };
+}
+const minOfIso = (iso, date) => {
+  const [d, t] = [iso.slice(0, 10), iso.slice(11, 16)];
+  const m = Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  return d < date ? 0 : d > date ? 1440 : m;
+};
+
+function loadHistory(date) {
+  if (historyLoading && historyLoading.date === date) return historyLoading.promise;
+  const promise = fetchHistory(date).finally(() => { if (historyLoading?.promise === promise) historyLoading = null; });
+  historyLoading = { date, promise };
+  return promise;
+}
+
+async function fetchHistory(date) {
+  const r = await api(`/world/history?date=${date}`);
+  if (!r.ok) return;
+  const h = await r.json();
+  historyDate = date;
+  liveTz = h.timezone;
+  liveChars = h.characters.map((c) => ({ id: c.id, name: c.display_name, appearance: c.appearance }));
+  liveBars = {};
+  for (const c of h.characters) {
+    liveBars[c.id] = c.events
+      .map((e) => ({ start: minOfIso(e.started_at, date), end: minOfIso(e.ends_at, date), scene: e.scene,
+        label: actOf(e.activity)[0], shared: e.participants.length > 1, base: e.type === "school" || e.type === "work" }))
+      .sort((a, b) => (b.base - a.base) || (b.end - b.start) - (a.end - a.start));
+  }
+}
+
+function drawLive() {
+  if (!liveState) return;
+  const { minute: m, date } = liveNow();
+  // 跨過 World 的午夜：換成新的一天的時間軸
+  if (historyDate && date !== historyDate) {
+    loadHistory(date).then(() => { if (historyDate === date) drawLive(); }, () => {});
+  }
+  const states = {};
+  for (const c of liveState.characters) {
+    states[c.id] = { scene: c.scene, activity: c.activity,
+      range: c.started_at ? `${c.started_at.slice(11, 16)}–${c.ends_at ? c.ends_at.slice(11, 16) : "?"}` : "" };
+  }
+  const chars = liveChars.length ? liveChars : liveState.characters.map((c, i) => ({ id: c.id, name: `角色 ${i + 1}`, appearance: c.appearance }));
+  renderScreens(chars, states, m);
+  renderTimeline(chars, liveBars, m);
+  $("devtime").textContent = `${date} ${hhmm(m)} ${liveTz}　revision ${liveState.revision}`;
+}
+
+async function poll() {
+  if (!token) return;
+  try {
+    const r = await api("/world/state", { headers: etag ? { "If-None-Match": etag } : {} });
+    if (r.status === 401) { liveStatus("裝置 token 失效，請重新配對。", true); forget(); return; }
+    if (r.status === 304) {
+      liveStatus(`${new Date().toLocaleTimeString()}　304 Not Modified（沒有變化）`);
+    } else if (r.ok) {
+      etag = r.headers.get("ETag");
+      liveState = await r.json();
+      serverClock = { iso: liveState.server_time, at: Date.now() };
+      await loadHistory(liveNow().date);
+      liveStatus(`${new Date().toLocaleTimeString()}　200 OK　ETag ${etag}`);
+    } else {
+      liveStatus(`輪詢失敗：HTTP ${r.status}`, true);
+    }
+    drawLive();
+  } catch (e) {
+    liveStatus("連不到後端。請從後端的 /demo 頁面開啟這個模式。", true);
+  }
+}
+
+function startPolling() {
+  clearInterval(pollTimer);
+  etag = null;
+  poll();
+  pollTimer = setInterval(poll, 15000);
+}
+
+async function pair() {
+  const code = $("code").value.trim();
+  if (!/^\d{6}$/.test(code)) { liveStatus("配對碼是 6 位數字。", true); return; }
+  try {
+    token = null;
+    const r = await api("/device/pair", { method: "POST", body: JSON.stringify({ pairing_code: code }) });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) { liveStatus(body.detail?.message || `配對失敗：HTTP ${r.status}`, true); return; }
+    token = body.device_token;
+    store.set("worldpane.demo.token", token);
+    liveStatus(`已配對 World ${body.world_id}`);
+    startPolling();
+  } catch { liveStatus("連不到後端。請從後端的 /demo 頁面開啟這個模式。", true); }
+}
+
+async function newWorld() {
+  try {
+    token = null;
+    const r = await api("/world", { method: "POST", body: JSON.stringify({ name: "Demo 房間", pairing_max_uses: 3 }) });
+    const body = await r.json();
+    if (!r.ok) { liveStatus(`建立失敗：HTTP ${r.status}`, true); return; }
+    token = body.device.device_token;
+    store.set("worldpane.demo.token", token);
+    liveStatus(`已建立 World，給另一台裝置的配對碼：${body.pairing.pairing_code}（可用 ${body.pairing.max_uses} 次）`);
+    startPolling();
+  } catch { liveStatus("連不到後端。請從後端的 /demo 頁面開啟這個模式。", true); }
+}
+
+function forget() {
+  clearInterval(pollTimer);
+  token = null; liveState = null; etag = null;
+  store.set("worldpane.demo.token", null);
+}
+
+function setMode(next) {
+  mode = next;
+  $("tab-offline").setAttribute("aria-pressed", String(next === "offline"));
+  $("tab-live").setAttribute("aria-pressed", String(next === "live"));
+  $("offline-panel").hidden = next !== "offline";
+  $("live-panel").hidden = next !== "live";
+  $("subtitle").textContent = next === "offline" ? "示範 World 一週回放" : "即時輪詢後端";
+  if (next === "offline") {
+    clearInterval(pollTimer);
+    if (DEMO) { drawnDay = -1; drawOffline(); }
+  } else {
+    setPlaying(false);
+    if (token) startPolling(); else { $("screens").textContent = ""; $("timeline").textContent = ""; liveStatus("尚未配對。輸入配對碼，或建立新 World。"); }
+  }
+}
+
+$("tab-offline").addEventListener("click", () => setMode("offline"));
+$("tab-live").addEventListener("click", () => setMode("live"));
+$("pair").addEventListener("click", pair);
+$("newworld").addEventListener("click", newWorld);
+$("forget").addEventListener("click", () => { forget(); setMode("live"); });
+
+if (DEMO) initOffline(); else { $("tab-offline").hidden = true; setMode("live"); }
+</script>

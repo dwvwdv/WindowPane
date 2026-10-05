@@ -1,0 +1,287 @@
+"""事件目錄：DB 組裝出的 config 要與 inline config 等價，且新事件只需新增資料。"""
+
+from __future__ import annotations
+
+import dataclasses
+from datetime import date
+
+from helpers import days
+
+from worldpane_core import demo_world, plan_day
+from worldpane_core.catalog import (
+    EventDefinition,
+    PoolEntry,
+    build_event_config,
+    build_shared_event_config,
+    official_definitions,
+    shared_settings,
+    split_event_config,
+    validate_definition,
+)
+
+START = date(2026, 10, 1)
+
+
+def _assemble(world, characters, extra_defs=(), extra_pool=(), shared_overrides=None):
+    """模擬 server 從 DB 讀出 definitions / pools / settings 後組裝的流程。"""
+    defs = {(d.category, d.key): d for d in [*official_definitions(), *extra_defs]}
+    new_chars = []
+    for c in characters:
+        settings, pool = split_event_config(c.profile.event_config)
+        entries = [PoolEntry(defs[(cat, key)], overrides) for cat, key, overrides in pool]
+        entries += [PoolEntry(defs[(cat, key)], {}) for cat, key in extra_pool]
+        profile = dataclasses.replace(c.profile, event_config=build_event_config(settings, entries))
+        new_chars.append(dataclasses.replace(c, profile=profile))
+    settings = shared_settings(world.shared_event_config)
+    if shared_overrides:
+        settings["overrides"] = shared_overrides
+    shared = build_shared_event_config(settings, [d for (cat, _), d in defs.items() if cat == "shared"])
+    return dataclasses.replace(world, shared_event_config=shared), new_chars
+
+
+def _timeline(world, chars, rels, d):
+    return [(e.type, e.start_at, e.end_at, tuple(e.participants)) for e in plan_day(world, chars, rels, d).events]
+
+
+def test_official_definitions_are_valid():
+    defs = official_definitions()
+    assert {d.category for d in defs} == {"temporary", "leisure", "shared"}
+    for d in defs:
+        assert validate_definition(d) == [], d.key
+
+
+def test_assembled_config_reproduces_inline_timeline():
+    world, chars, rels = demo_world(5)
+    a_world, a_chars = _assemble(world, chars)
+    for d in days(START, 30):
+        assert _timeline(world, chars, rels, d) == _timeline(a_world, a_chars, rels, d)
+
+
+def test_new_leisure_event_is_pure_data():
+    cooking = EventDefinition(
+        key="cooking",
+        category="leisure",
+        label="煮飯",
+        scene="home_kitchen",
+        location="HOME",
+        activity="cooking",
+        params={
+            "weight": 500,
+            "min_duration": 20,
+            "max_duration": 40,
+            "allowed_time": [["17:30", "21:00"]],
+            "allowed_context": ["weekday", "holiday", "leave"],
+            "cooldown_min": 24 * 60,
+        },
+    )
+    assert validate_definition(cooking) == []
+    world, chars, rels = demo_world(2)
+    a_world, a_chars = _assemble(world, chars, extra_defs=[cooking], extra_pool=[("leisure", "cooking")])
+    seen = [
+        e for d in days(START, 14) for e in plan_day(a_world, a_chars, rels, d).events if e.type == "cooking"
+    ]
+    assert seen, "new data-only event never scheduled"
+    assert all(e.activity == "cooking" and e.scene == "home_kitchen" for e in seen)
+
+
+def test_new_shared_event_is_pure_data():
+    board_game = EventDefinition(
+        key="board_game",
+        category="shared",
+        label="玩桌遊",
+        scene="home_living_room",
+        location="HOME",
+        activity="board_game",
+        params={
+            "weight": 1000,
+            "min_participants": 3,
+            "max_participants": None,
+            "min_duration": 60,
+            "max_duration": 120,
+            "allowed_time": [["13:00", "23:00"]],
+            "allowed_context": ["holiday"],
+        },
+    )
+    world, chars, rels = demo_world(4)
+    a_world, a_chars = _assemble(world, chars, extra_defs=[board_game])
+    events = [
+        e for d in days(START, 21) for e in plan_day(a_world, a_chars, rels, d).events if e.type == "board_game"
+    ]
+    assert events
+    assert all(len(e.participants) >= 3 for e in events)
+
+
+def test_context_override_disables_event_on_holiday():
+    world, chars, rels = demo_world(2)
+    defs = [
+        dataclasses.replace(
+            d,
+            params={**d.params, "context_overrides": {"holiday": {"enabled": False}}},
+        )
+        if d.category == "leisure" and d.key == "phone"
+        else d
+        for d in official_definitions()
+    ]
+    a_world, a_chars = _assemble(world, chars, extra_defs=defs)
+    phones = {"weekday": 0, "holiday": 0}
+    for d in days(START, 28):
+        plan = plan_day(a_world, a_chars, rels, d)
+        for e in plan.events:
+            if e.type == "phone":
+                phones["holiday" if plan.calendar.holiday else "weekday"] += 1
+    assert phones["holiday"] == 0
+    assert phones["weekday"] > 0
+
+
+def test_world_override_disables_shared_event():
+    world, chars, rels = demo_world(2)
+    a_world, a_chars = _assemble(world, chars, shared_overrides={"date": {"enabled": False}})
+    for d in days(START, 28):
+        assert all(e.type != "date" for e in plan_day(a_world, a_chars, rels, d).events)
+
+
+def test_validate_definition_reports_problems():
+    bad = EventDefinition(
+        key="broken",
+        category="shared",
+        label="壞掉",
+        params={"min_duration": 30, "max_duration": 10, "min_participants": 1},
+    )
+    errors = validate_definition(bad)
+    assert any("min_duration" in e for e in errors)
+    assert any("allowed_time" in e for e in errors)
+    assert any("min_participants" in e for e in errors)
+
+
+def test_invalid_override_is_skipped_after_merge():
+    defs = {(d.category, d.key): d for d in official_definitions()}
+    reading = defs[("leisure", "reading")]
+    shower = defs[("leisure", "shower")]
+    bad_ctx = dataclasses.replace(
+        defs[("leisure", "phone")],
+        params={**defs[("leisure", "phone")].params, "context_overrides": {"holiday": {"min_duration": 999}}},
+    )
+    errors: list[str] = []
+    cfg = build_event_config(
+        {"leisure": {}},
+        [
+            PoolEntry(reading, {"min_duration": 90, "max_duration": 10}),  # valid base, bad override
+            PoolEntry(bad_ctx),  # bad only on holidays
+            PoolEntry(shower),
+        ],
+        on_invalid=errors.append,
+    )
+    assert [e["type"] for e in cfg["leisure"]["events"]] == ["shower"]
+    assert len(errors) == 2 and any("context holiday" in e for e in errors)
+
+    shared = build_shared_event_config(
+        {"overrides": {"date": {"min_participants": 1}}},
+        [d for d in official_definitions() if d.category == "shared"],
+        on_invalid=errors.append,
+    )
+    assert "date" not in {r["type"] for r in shared["rules"]}
+
+
+def test_invalid_entry_raises_without_handler():
+    reading = next(d for d in official_definitions() if d.key == "reading")
+    try:
+        build_event_config({}, [PoolEntry(reading, {"allowed_time": [["25:00", "26:00"]]})])
+    except ValueError as exc:
+        assert "allowed_time" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError")
+
+
+def test_scalar_allowed_time_is_reported_not_raised():
+    reading = next(d for d in official_definitions() if d.key == "reading")
+    errors: list[str] = []
+    for bad in (1, "17:00-18:00", {"start": "17:00"}):
+        cfg = build_event_config({}, [PoolEntry(reading, {"allowed_time": bad})], on_invalid=errors.append)
+        assert cfg["leisure"]["events"] == []
+    assert len(errors) == 3 and all("allowed_time" in e for e in errors)
+
+
+def test_invalid_display_codes_are_reported_not_scheduled():
+    shower = next(d for d in official_definitions() if d.key == "shower")
+    errors: list[str] = []
+    for bad in ({"scene": None}, {"scene": "home bathroom"}, {"activity": "Shower!"}, {"location": "home-1"}):
+        cfg = build_event_config({}, [PoolEntry(shower, bad)], on_invalid=errors.append)
+        assert cfg["leisure"]["events"] == []
+    assert len(errors) == 4
+    date_rule = next(d for d in official_definitions() if d.key == "date")
+    shared = build_shared_event_config(
+        {"overrides": {"date": {"scene": "city cafe"}}}, [date_rule], on_invalid=errors.append
+    )
+    assert shared["rules"] == []
+
+
+def test_malformed_json_shapes_are_reported_not_raised():
+    defs = official_definitions()
+    reading = next(d for d in defs if d.key == "reading")
+    shared_defs = [d for d in defs if d.category == "shared"]
+    errors: list[str] = []
+    for bad in ({"allowed_time": [{}]}, {"allowed_time": [["17:00"]]}, {"allowed_time": [[1, 2]]}):
+        cfg = build_event_config({}, [PoolEntry(reading, bad)], on_invalid=errors.append)
+        assert cfg["leisure"]["events"] == []
+    cfg = build_event_config({}, [PoolEntry(reading, ["not", "an", "object"])], on_invalid=errors.append)
+    assert cfg["leisure"]["events"] == []
+    broken = dataclasses.replace(reading, params=[1, 2])
+    assert build_event_config({}, [PoolEntry(broken)], on_invalid=errors.append)["leisure"]["events"] == []
+    assert len(errors) == 5
+
+    errors.clear()
+    for container in (["date"], "date", 5):
+        shared = build_shared_event_config({"overrides": container}, shared_defs, on_invalid=errors.append)
+        assert {r["type"] for r in shared["rules"]} == {d.key for d in shared_defs}
+    shared = build_shared_event_config({"overrides": {"date": "off"}}, shared_defs, on_invalid=errors.append)
+    assert "date" not in {r["type"] for r in shared["rules"]}
+    assert len(errors) == 4
+
+
+def test_malformed_settings_sections_fall_back_to_defaults():
+    reading = next(d for d in official_definitions() if d.key == "reading")
+    errors: list[str] = []
+    for settings in ({"leisure": []}, {"leisure": "x", "temporary": 3}, ["not", "an", "object"]):
+        cfg = build_event_config(settings, [PoolEntry(reading)], on_invalid=errors.append)
+        assert [e["type"] for e in cfg["leisure"]["events"]] == ["reading"]
+        assert cfg["temporary"]["events"] == []
+    assert len(errors) == 4
+    shared = build_shared_event_config([1], [d for d in official_definitions() if d.category == "shared"],
+                                       on_invalid=errors.append)
+    assert shared["rules"]
+
+
+def test_malformed_nested_settings_are_reported_and_planning_still_runs():
+    world, chars, rels = demo_world(2)
+    errors: list[str] = []
+    bad_settings = [
+        {"leisure": {"windows": ["17:30", "23:30"]}},
+        {"leisure": {"windows": {"weekday": "17:30-23:30", "holiday": [["10:00", "22:00"]]},
+                     "gap_min": "x", "gap_max": -1},
+         "temporary": {"attempts_per_block": "3", "trigger_probability": 2}},
+        {"leisure": {"gap_min": 50, "gap_max": 10}},
+    ]
+    for bad in bad_settings:
+        new_chars = []
+        for c in chars:
+            settings, pool = split_event_config(c.profile.event_config)
+            defs = {(d.category, d.key): d for d in official_definitions()}
+            entries = [PoolEntry(defs[(cat, key)], ov) for cat, key, ov in pool]
+            cfg = build_event_config({**settings, **bad}, entries, on_invalid=errors.append)
+            new_chars.append(dataclasses.replace(c, profile=dataclasses.replace(c.profile, event_config=cfg)))
+        for d in days(START, 7):
+            plan_day(world, new_chars, rels, d)
+    assert any("windows must be an object" in e for e in errors)
+    assert any("windows.weekday" in e for e in errors)
+    assert any("gap_min must be <= gap_max" in e for e in errors)
+    assert any("trigger_probability" in e for e in errors)
+
+    shared_errors: list[str] = []
+    shared = build_shared_event_config(
+        {**shared_settings(world.shared_event_config), "attempts": "lots", "slot_step_min": 0},
+        [d for d in official_definitions() if d.category == "shared"], on_invalid=shared_errors.append,
+    )
+    assert "attempts" not in shared and "slot_step_min" not in shared
+    assert len(shared_errors) == 2
+    for d in days(START, 7):
+        plan_day(dataclasses.replace(world, shared_event_config=shared), chars, rels, d)

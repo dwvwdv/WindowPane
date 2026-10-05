@@ -1063,7 +1063,7 @@ ETag / If-None-Match
 核心 API：
 
 ```http
-GET /api/v1/device/state
+GET /api/v1/world/state
 ```
 
 取得此 Device 所綁 World 的 Current State。
