@@ -124,6 +124,12 @@ class CreateWorldIn(BaseModel):
     pairing_max_uses: int | None = Field(default=None, ge=1, le=20)
     firmware_version: str | None = Field(default=None, max_length=64)
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, v: object) -> object:
+        # Same rule as the DB check (btrim): a blank name is a 422, not a 500.
+        return v.strip() if isinstance(v, str) else v
+
     @field_validator("timezone")
     @classmethod
     def _valid_tz(cls, v: str | None) -> str | None:

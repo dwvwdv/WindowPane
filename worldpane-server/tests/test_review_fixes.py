@@ -103,3 +103,24 @@ def test_failed_world_creation_leaves_nothing_behind(client, repo, monkeypatch):
     mine = created.json()["device"]["device_token"]
     assert client.get("/api/v1/device/state", headers=auth(mine)).status_code == 200
     assert client.get("/api/v1/device/state", headers=auth(pair(client, created.json()["pairing"]["pairing_code"]))).status_code == 200
+
+
+def test_blank_world_name_is_rejected(client):
+    assert client.post("/api/v1/world", json={"name": "   "}).status_code == 422
+    r = client.post("/api/v1/world", json={"name": "  Our Room  "})
+    assert r.status_code == 201
+
+
+def test_demo_seed_survives_a_concurrent_creator(app, repo, monkeypatch):
+    """Another worker creates the demo world between our existence check and our insert."""
+    from worldpane_server.main import seed_demo
+
+    real_get_world = repo.get_world
+    calls = {"n": 0}
+
+    def racing_get_world(world_id):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else real_get_world(world_id)
+
+    monkeypatch.setattr(repo, "get_world", racing_get_world)
+    assert seed_demo(app.state.service) == DEMO_CODE

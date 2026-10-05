@@ -43,12 +43,17 @@ def seed_demo(service: WorldService) -> str:
     With Postgres the world usually already exists (``supabase/seed.sql``); it is reused.
     """
     if service.repo.get_world(DEMO_WORLD_ID) is None:
-        create_world_with_defaults(
-            service.repo, world_id=DEMO_WORLD_ID, name="窗間 Demo",
-            timezone=service.settings.default_timezone, created_at=service.clock.now(),
-            start_date=DEMO_START_DATE,
-            characters=official_default_characters(DEMO_WORLD_ID, DEMO_CHARACTER_IDS),
-        )
+        try:
+            create_world_with_defaults(
+                service.repo, world_id=DEMO_WORLD_ID, name="窗間 Demo",
+                timezone=service.settings.default_timezone, created_at=service.clock.now(),
+                start_date=DEMO_START_DATE,
+                characters=official_default_characters(DEMO_WORLD_ID, DEMO_CHARACTER_IDS),
+            )
+        except ValueError:
+            # Another worker created it between our check and insert; theirs is identical.
+            if service.repo.get_world(DEMO_WORLD_ID) is None:
+                raise
     fixed = service.settings.demo_pairing_code or None
     try:
         out = service.issue_pairing_code(DEMO_WORLD_ID, max_uses=10, code=fixed)
