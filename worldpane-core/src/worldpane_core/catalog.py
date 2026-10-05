@@ -19,6 +19,7 @@ World 的 shared 事件則取所有啟用中的 shared 定義，並可在 World 
 from __future__ import annotations
 
 import copy
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping
@@ -123,11 +124,21 @@ def validate_definition(defn: EventDefinition | Mapping[str, Any], category: str
     return errors
 
 
+_CODE = re.compile(r"[a-z0-9_]{1,64}")
+_LOCATION = re.compile(r"[A-Za-z0-9_]{1,64}")
+
+
 def _validate_effective(ev: Mapping[str, Any], category: str) -> list[str]:
     errors: list[str] = []
     key = ev.get("type", "?")
     if category not in CATEGORIES:
         errors.append(f"{key}: unknown category {category!r}")
+    # Display codes end up in persisted events; same rules as the events table checks.
+    if not isinstance(ev.get("type"), str) or not _CODE.fullmatch(ev["type"]):
+        errors.append(f"{key}: type must match [a-z0-9_]{{1,64}}")
+    for name, pattern in (("scene", _CODE), ("activity", _CODE), ("location", _LOCATION)):
+        if name in ev and not (isinstance(ev[name], str) and pattern.fullmatch(ev[name])):
+            errors.append(f"{key}: {name} must match {pattern.pattern}")
     try:
         lo, hi = int(ev["min_duration"]), int(ev["max_duration"])
         if not 0 < lo <= hi:

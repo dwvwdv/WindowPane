@@ -147,3 +147,19 @@ def test_migrations_only_database_works(settings, clock, request):
     mine = created.json()["device"]["device_token"]
     assert app.get("/api/v1/device/state", headers=auth(mine)).status_code == 200
     assert app.get("/api/v1/device/state", headers=auth(pair(app))).status_code == 200
+
+
+def test_world_definition_shadows_official_pool_entry(client, token, repo, clock):
+    clock.set(datetime(2026, 10, 9, 9, 0, tzinfo=TPE))
+    days = ("2026-10-06", "2026-10-07", "2026-10-08")
+    with repo._pool.connection() as conn:
+        conn.execute(
+            """insert into worldpane.event_definitions
+                 (world_id, key, category, label, scene, location, activity, params, enabled, sort_order)
+               select %s, key, category, '看漫畫', 'home_bedroom', location, 'reading_comics', params, enabled, sort_order
+                 from worldpane.event_definitions where world_id is null and category = 'leisure' and key = 'phone'""",
+            (DEMO_WORLD_ID,),
+        )
+    phones = [e for day in days for e in _history(client, token, day) if e["type"] == "phone"]
+    assert phones, "the demo world never scheduled the phone event"
+    assert {(e["activity"], e["scene"]) for e in phones} == {("reading_comics", "home_bedroom")}

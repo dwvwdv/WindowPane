@@ -199,3 +199,17 @@ def test_scalar_allowed_time_is_reported_not_raised():
         cfg = build_event_config({}, [PoolEntry(reading, {"allowed_time": bad})], on_invalid=errors.append)
         assert cfg["leisure"]["events"] == []
     assert len(errors) == 3 and all("allowed_time" in e for e in errors)
+
+
+def test_invalid_display_codes_are_reported_not_scheduled():
+    shower = next(d for d in official_definitions() if d.key == "shower")
+    errors: list[str] = []
+    for bad in ({"scene": None}, {"scene": "home bathroom"}, {"activity": "Shower!"}, {"location": "home-1"}):
+        cfg = build_event_config({}, [PoolEntry(shower, bad)], on_invalid=errors.append)
+        assert cfg["leisure"]["events"] == []
+    assert len(errors) == 4
+    date_rule = next(d for d in official_definitions() if d.key == "date")
+    shared = build_shared_event_config(
+        {"overrides": {"date": {"scene": "city cafe"}}}, [date_rule], on_invalid=errors.append
+    )
+    assert shared["rules"] == []

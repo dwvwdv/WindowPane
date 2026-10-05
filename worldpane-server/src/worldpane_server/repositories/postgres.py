@@ -269,16 +269,30 @@ class PostgresRepository:
             pools = conn.execute(
                 """select pp.profile_id, pp.overrides, pp.enabled as pool_enabled,
                           d.id as def_id, d.key, d.category, d.label, d.scene, d.location,
-                          d.activity, d.params, d.enabled as def_enabled, d.sort_order
+                          d.activity, d.params, d.enabled as def_enabled, d.sort_order,
+                          d.world_id as def_world_id
                      from worldpane.profile_event_pools pp
                      join worldpane.event_definitions d on d.id = pp.event_definition_id
                     where pp.profile_id = any(%s)""",
                 (profile_ids,),
             ).fetchall() if profile_ids else []
+            # A world-owned definition shadows the official one with the same (category, key),
+            # also inside the (global) official profiles' pools.
+            shadows = {
+                (r["category"], r["key"]): r
+                for r in conn.execute(
+                    """select d.id as def_id, d.key, d.category, d.label, d.scene, d.location,
+                              d.activity, d.params, d.enabled as def_enabled, d.sort_order
+                         from worldpane.event_definitions d
+                        where d.world_id = %s and d.category in ('temporary', 'leisure')""",
+                    (world_id,),
+                ).fetchall()
+            } if pools else {}
         by_profile: dict[Any, list[PoolEntry]] = {}
         for p in pools:
+            source = shadows.get((p["category"], p["key"]), p) if p["def_world_id"] is None else p
             by_profile.setdefault(p["profile_id"], []).append(
-                PoolEntry(_definition(p), p["overrides"] or {}, p["pool_enabled"])
+                PoolEntry(_definition(source), p["overrides"] or {}, p["pool_enabled"])
             )
         return [
             Character(
