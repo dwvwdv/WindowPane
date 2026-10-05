@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import threading
+from collections.abc import Sequence
 from datetime import date, datetime
 
 from ..domain import (
@@ -35,13 +36,38 @@ class InMemoryRepository:
         """Nothing to install: in-memory characters carry their profiles directly."""
 
     # worlds
-    def create_world(self, world: World) -> None:
+    def create_world(
+        self,
+        world: World,
+        characters: Sequence[Character] = (),
+        relationships: Sequence[CharacterRelationship] = (),
+        devices: Sequence[Device] = (),
+        pairing_codes: Sequence[PairingCode] = (),
+    ) -> None:
         with self._lock:
+            # Check everything first so a failure leaves nothing behind.
             if world.id in self._worlds:
                 raise ValueError(f"world {world.id} already exists")
+            for code in pairing_codes:
+                self._check_code_free(code)
             self._worlds[world.id] = copy.deepcopy(world)
-            self._characters.setdefault(world.id, [])
-            self._relationships.setdefault(world.id, [])
+            self._characters[world.id] = [copy.deepcopy(c) for c in characters]
+            self._relationships[world.id] = [copy.deepcopy(r) for r in relationships]
+            try:
+                for d in devices:
+                    self.add_device(d)
+                for code in pairing_codes:
+                    self.add_pairing_code(code)
+            except BaseException:
+                # Roll back, like the Postgres transaction does.
+                for d in devices:
+                    if self._devices.pop(d.id, None) is not None:
+                        self._device_by_hash.pop(d.device_token_hash, None)
+                for code in pairing_codes:
+                    if self._codes.pop(code.id, None) is not None:
+                        self._code_by_hash.pop(code.code_hash, None)
+                del self._worlds[world.id], self._characters[world.id], self._relationships[world.id]
+                raise
 
     def get_world(self, world_id: str) -> World | None:
         with self._lock:
@@ -120,13 +146,16 @@ class InMemoryRepository:
             return [copy.deepcopy(d) for d in self._devices.values() if d.world_id == world_id]
 
     # pairing codes
+    def _check_code_free(self, code: PairingCode) -> None:
+        existing_id = self._code_by_hash.get(code.code_hash)
+        if existing_id is not None:
+            existing = self._codes[existing_id]
+            if not existing.is_expired(code.created_at) and not existing.is_exhausted():
+                raise ValueError("an active pairing code with this value already exists")
+
     def add_pairing_code(self, code: PairingCode) -> None:
         with self._lock:
-            existing_id = self._code_by_hash.get(code.code_hash)
-            if existing_id is not None:
-                existing = self._codes[existing_id]
-                if not existing.is_expired(code.created_at) and not existing.is_exhausted():
-                    raise ValueError("an active pairing code with this value already exists")
+            self._check_code_free(code)
             self._codes[code.id] = copy.deepcopy(code)
             self._code_by_hash[code.code_hash] = code.id
 

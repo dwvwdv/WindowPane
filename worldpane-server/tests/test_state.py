@@ -54,7 +54,7 @@ def test_shared_event_has_same_activity_for_all(client, app, token, clock):
     characters = service.repo.list_characters(DEMO_WORLD_ID)
     shared = None
     for day in range(5, 20):
-        events = service.ensure_plan(world, characters, NOW.date().replace(day=day))
+        events = service.ensure_plan(world, NOW.date().replace(day=day))
         shared = next((e for e in events if len(e.participant_ids) == len(characters)), None)
         if shared:
             break

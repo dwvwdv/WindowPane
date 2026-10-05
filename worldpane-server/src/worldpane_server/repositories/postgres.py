@@ -11,6 +11,7 @@ Persisted plans are immutable history (spec §15, §17).
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any
 
@@ -108,19 +109,35 @@ class PostgresRepository:
                     )
 
     # --- worlds -----------------------------------------------------------------------
-    def create_world(self, world: World) -> None:
-        with self._pool.connection() as conn:
+    def create_world(
+        self,
+        world: World,
+        characters: Sequence[Character] = (),
+        relationships: Sequence[CharacterRelationship] = (),
+        devices: Sequence[Device] = (),
+        pairing_codes: Sequence[PairingCode] = (),
+    ) -> None:
+        with self._pool.connection() as conn, conn.transaction():
             try:
-                conn.execute(
-                    """insert into worldpane.worlds
-                         (id, name, timezone, simulation_version, simulation_start_date,
-                          shared_event_config, created_at)
-                       values (%s, %s, %s, %s, %s, %s, %s)""",
-                    (world.id, world.name, world.timezone, world.simulation_version,
-                     world.simulation_start_date, Jsonb(world.shared_event_config), world.created_at),
-                )
+                with conn.transaction():
+                    conn.execute(
+                        """insert into worldpane.worlds
+                             (id, name, timezone, simulation_version, simulation_start_date,
+                              shared_event_config, created_at)
+                           values (%s, %s, %s, %s, %s, %s, %s)""",
+                        (world.id, world.name, world.timezone, world.simulation_version,
+                         world.simulation_start_date, Jsonb(world.shared_event_config), world.created_at),
+                    )
             except errors.UniqueViolation as exc:
                 raise ValueError(f"world {world.id} already exists") from exc
+            for c in characters:
+                self._insert_character(conn, c)
+            for r in relationships:
+                self._insert_relationship(conn, r)
+            for d in devices:
+                self._insert_device(conn, d)
+            for code in pairing_codes:
+                self._insert_pairing_code(conn, code)
 
     def get_world(self, world_id: str) -> World | None:
         with self._pool.connection() as conn:
@@ -223,15 +240,18 @@ class PostgresRepository:
             )
 
     def add_character(self, character: Character) -> None:
-        with self._pool.connection() as conn:
-            self._ensure_profile(conn, character.profile, character.world_id)
-            conn.execute(
-                """insert into worldpane.characters
-                     (id, world_id, appearance_key, display_name, profile_id, sort_order)
-                   values (%s, %s, %s, %s, %s, %s)""",
-                (character.id, character.world_id, character.appearance_key,
-                 character.display_name, character.profile.id, character.sort_order),
-            )
+        with self._pool.connection() as conn, conn.transaction():
+            self._insert_character(conn, character)
+
+    def _insert_character(self, conn, character: Character) -> None:
+        self._ensure_profile(conn, character.profile, character.world_id)
+        conn.execute(
+            """insert into worldpane.characters
+                 (id, world_id, appearance_key, display_name, profile_id, sort_order)
+               values (%s, %s, %s, %s, %s, %s)""",
+            (character.id, character.world_id, character.appearance_key,
+             character.display_name, character.profile.id, character.sort_order),
+        )
 
     def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         with self._pool.connection() as conn:
@@ -284,14 +304,18 @@ class PostgresRepository:
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
         with self._pool.connection() as conn:
-            conn.execute(
-                """insert into worldpane.character_relationships
-                     (id, world_id, character_a_id, character_b_id, relationship_type, metadata)
-                   values (%s, %s, %s, %s, %s, %s)""",
-                (relationship.id, relationship.world_id, relationship.character_a_id,
-                 relationship.character_b_id, relationship.relationship_type,
-                 Jsonb(relationship.metadata)),
-            )
+            self._insert_relationship(conn, relationship)
+
+    @staticmethod
+    def _insert_relationship(conn, relationship: CharacterRelationship) -> None:
+        conn.execute(
+            """insert into worldpane.character_relationships
+                 (id, world_id, character_a_id, character_b_id, relationship_type, metadata)
+               values (%s, %s, %s, %s, %s, %s)""",
+            (relationship.id, relationship.world_id, relationship.character_a_id,
+             relationship.character_b_id, relationship.relationship_type,
+             Jsonb(relationship.metadata)),
+        )
 
     def list_relationships(self, world_id: str) -> list[CharacterRelationship]:
         with self._pool.connection() as conn:
@@ -433,23 +457,27 @@ class PostgresRepository:
 
     def add_pairing_code(self, code: PairingCode) -> None:
         with self._pool.connection() as conn, conn.transaction():
-            # Retire an expired-but-unconsumed code with the same value so the value can be reused.
-            conn.execute(
-                """update worldpane.pairing_codes set consumed_at = %s, consumed_reason = 'expired'
-                    where code_hash = %s and consumed_at is null and expires_at <= %s""",
-                (code.created_at, code.code_hash, code.created_at),
-            )
-            try:
-                with conn.transaction():
-                    conn.execute(
-                        """insert into worldpane.pairing_codes
-                             (id, world_id, code_hash, expires_at, max_uses, used_count, created_at)
-                           values (%s, %s, %s, %s, %s, %s, %s)""",
-                        (code.id, code.world_id, code.code_hash, code.expires_at, code.max_uses,
-                         code.used_count, code.created_at),
-                    )
-            except errors.UniqueViolation as exc:
-                raise ValueError("an active pairing code with this value already exists") from exc
+            self._insert_pairing_code(conn, code)
+
+    @staticmethod
+    def _insert_pairing_code(conn, code: PairingCode) -> None:
+        # Retire an expired-but-unconsumed code with the same value so the value can be reused.
+        conn.execute(
+            """update worldpane.pairing_codes set consumed_at = %s, consumed_reason = 'expired'
+                where code_hash = %s and consumed_at is null and expires_at <= %s""",
+            (code.created_at, code.code_hash, code.created_at),
+        )
+        try:
+            with conn.transaction():
+                conn.execute(
+                    """insert into worldpane.pairing_codes
+                         (id, world_id, code_hash, expires_at, max_uses, used_count, created_at)
+                       values (%s, %s, %s, %s, %s, %s, %s)""",
+                    (code.id, code.world_id, code.code_hash, code.expires_at, code.max_uses,
+                     code.used_count, code.created_at),
+                )
+        except errors.UniqueViolation as exc:
+            raise ValueError("an active pairing code with this value already exists") from exc
 
     def get_pairing_code_by_hash(self, code_hash: str) -> PairingCode | None:
         with self._pool.connection() as conn:

@@ -24,7 +24,7 @@ from .security import (
     hash_pairing_code,
     new_id,
 )
-from .seed import create_world_with_defaults
+from .seed import build_world_with_defaults
 from .simulation.provider import SimulationProvider
 
 # Rendered when the provider reports no active event for a character (should be rare).
@@ -64,7 +64,19 @@ class WorldService:
     def local_today(world: World, now: datetime) -> date:
         return now.astimezone(ZoneInfo(world.timezone)).date()
 
-    def ensure_plan(self, world: World, characters: list[Character], local_date: date) -> list[Event]:
+    def cast_on(self, world: World, local_date: date) -> list[Character]:
+        """Characters that take part in ``local_date``: active ones plus any archived on or after it.
+
+        Archiving only stops *future* plans (spec §17); a past date first materialised after the
+        archive still includes the character, so their history does not depend on request order.
+        """
+        tz = ZoneInfo(world.timezone)
+        return [
+            c for c in self.repo.list_characters(world.id, include_archived=True)
+            if c.archived_at is None or c.archived_at.astimezone(tz).date() >= local_date
+        ]
+
+    def ensure_plan(self, world: World, local_date: date) -> list[Event]:
         """Load the persisted plan for ``local_date`` or generate+persist it (lazy, deterministic).
 
         The World keeps running while devices are offline (spec §16): any date can be
@@ -75,6 +87,7 @@ class WorldService:
         plan = self.repo.get_daily_plan(world.id, local_date)
         if plan is not None:
             return plan
+        characters = self.cast_on(world, local_date)
         relationships = self.repo.list_relationships(world.id)
         events = self.sim.generate_daily_plan(world, characters, relationships, local_date)
         if not self.repo.save_daily_plan(world.id, local_date, events):
@@ -90,9 +103,7 @@ class WorldService:
         characters = self.repo.list_characters(world.id)
         today = self.local_today(world, now)
         # Include yesterday so events crossing local midnight are still found.
-        events = self.ensure_plan(world, characters, today - timedelta(days=1)) + self.ensure_plan(
-            world, characters, today
-        )
+        events = self.ensure_plan(world, today - timedelta(days=1)) + self.ensure_plan(world, today)
         current = self.sim.current_state(events, now, [c.id for c in characters])
 
         def local(dt: datetime | None) -> datetime | None:
@@ -129,7 +140,7 @@ class WorldService:
         if local_date > today:
             raise ServiceError(422, "date_in_future", "History is only available up to today (World timezone)")
         tz = ZoneInfo(world.timezone)
-        events = self.ensure_plan(world, self.repo.list_characters(world.id), local_date)
+        events = self.ensure_plan(world, local_date)
         # Archived characters stay in history for the days they took part in (spec §17).
         involved = {cid for e in events for cid in e.participant_ids}
         characters = [
@@ -167,28 +178,33 @@ class WorldService:
         )
         return device, schemas.DeviceCredentials(device_id=device.id, world_id=world_id, device_token=token)
 
-    def issue_pairing_code(self, world_id: str, max_uses: int | None = None,
-                           code: str | None = None) -> schemas.PairingCodeOut:
-        world = self._world(world_id)
+    def _new_pairing_code(self, world: World, max_uses: int | None,
+                          code: str | None) -> tuple[PairingCode, schemas.PairingCodeOut]:
         now = self.clock.now()
         uses = max_uses or self.settings.pairing_code_max_uses
         expires = now + timedelta(seconds=self.settings.pairing_code_ttl_seconds)
+        value = code or generate_pairing_code()
+        pc = PairingCode(
+            id=new_id(), world_id=world.id,
+            code_hash=hash_pairing_code(value, self.settings.pairing_code_secret),
+            expires_at=expires, max_uses=uses, used_count=0, created_at=now,
+        )
+        return pc, schemas.PairingCodeOut(
+            pairing_code=value, expires_at=expires.astimezone(ZoneInfo(world.timezone)), max_uses=uses
+        )
+
+    def issue_pairing_code(self, world_id: str, max_uses: int | None = None,
+                           code: str | None = None) -> schemas.PairingCodeOut:
+        world = self._world(world_id)
         for _ in range(20):
-            value = code or generate_pairing_code()
-            pc = PairingCode(
-                id=new_id(), world_id=world.id,
-                code_hash=hash_pairing_code(value, self.settings.pairing_code_secret),
-                expires_at=expires, max_uses=uses, used_count=0, created_at=now,
-            )
+            pc, out = self._new_pairing_code(world, max_uses, code)
             try:
                 self.repo.add_pairing_code(pc)
             except ValueError:
                 if code is not None:
                     raise
                 continue  # collided with another active code; draw again
-            return schemas.PairingCodeOut(
-                pairing_code=value, expires_at=expires.astimezone(ZoneInfo(world.timezone)), max_uses=uses
-            )
+            return out
         raise ServiceError(503, "pairing_code_unavailable", "Could not allocate a pairing code, retry")
 
     def pair(self, code: str, firmware_version: str | None) -> schemas.DeviceCredentials:
@@ -209,14 +225,19 @@ class WorldService:
         now = self.clock.now()
         tz_name = body.timezone or self.settings.default_timezone
         start = now.astimezone(ZoneInfo(tz_name)).date()
-        world = create_world_with_defaults(
-            self.repo, world_id=new_id(), name=body.name, timezone=tz_name,
-            created_at=now, start_date=start,
+        world, characters, relationships = build_world_with_defaults(
+            world_id=new_id(), name=body.name, timezone=tz_name, created_at=now, start_date=start,
         )
         device, creds = self._new_device(world.id, body.firmware_version)
-        self.repo.add_device(device)
-        pairing = self.issue_pairing_code(world.id, body.pairing_max_uses)
-        return schemas.CreateWorldOut(world_id=world.id, device=creds, pairing=pairing)
+        for _ in range(20):
+            pc, pairing = self._new_pairing_code(world, body.pairing_max_uses, None)
+            try:
+                # One transaction: a failure leaves no half-created world or orphaned device.
+                self.repo.create_world(world, characters, relationships, [device], [pc])
+            except ValueError:
+                continue  # the pairing code collided with an active one; draw again
+            return schemas.CreateWorldOut(world_id=world.id, device=creds, pairing=pairing)
+        raise ServiceError(503, "pairing_code_unavailable", "Could not allocate a pairing code, retry")
 
     def record_input(self, device: Device, body: schemas.DeviceInputIn) -> schemas.DeviceInputAccepted:
         item = DeviceInput(

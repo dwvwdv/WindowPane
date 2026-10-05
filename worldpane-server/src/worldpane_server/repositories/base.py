@@ -2,16 +2,15 @@
 
 The API/service layer depends only on this Protocol. Implementations:
 
-* ``InMemoryRepository`` (``repositories/memory.py``) — used now, for dev and tests.
-* ``PostgresRepository`` (``repositories/postgres.py``) — TODO, will target the Supabase
-  schema being built under ``/supabase``.
+* ``InMemoryRepository`` (``repositories/memory.py``) — dev and tests.
+* ``PostgresRepository`` (``repositories/postgres.py``) — the Supabase schema under ``/supabase``.
 
-Methods are synchronous; FastAPI runs ``def`` endpoints in a threadpool. If the Postgres
-implementation ends up async, switch this Protocol and the service layer together.
+Methods are synchronous; FastAPI runs ``def`` endpoints in a threadpool.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Protocol, runtime_checkable
 
@@ -49,7 +48,18 @@ class Repository(Protocol):
         ...
 
     # --- worlds -----------------------------------------------------------------------
-    def create_world(self, world: World) -> None: ...
+    def create_world(
+        self,
+        world: World,
+        characters: Sequence[Character] = (),
+        relationships: Sequence[CharacterRelationship] = (),
+        devices: Sequence[Device] = (),
+        pairing_codes: Sequence[PairingCode] = (),
+    ) -> None:
+        """Create ``world`` with its initial characters, relationships, devices and pairing codes
+        all-or-nothing: on any failure (e.g. ``ValueError`` for a pairing-code collision) nothing
+        is left behind, so a retry never leaves partial or orphaned worlds."""
+        ...
 
     def get_world(self, world_id: str) -> World | None: ...
 

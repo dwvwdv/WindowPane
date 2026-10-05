@@ -62,3 +62,44 @@ def test_restart_reuses_live_fixed_demo_code(settings, repo, clock, app):
     second = TestClient(create_app(settings, repository=repo, clock=clock))
     assert second.app.state.demo_pairing_code == DEMO_CODE
     assert second.get("/api/v1/device/state", headers=auth(pair(second))).status_code == 200
+
+
+def test_archiving_before_materialisation_keeps_history(client, token, repo, clock, settings):
+    """Archive first, then view a past date nobody had looked at yet: the character is still there."""
+    clock.set(datetime(2026, 10, 7, 9, 0, tzinfo=TPE))
+    _archive(repo, DEMO_CHARACTER_IDS[1], clock.now())
+    q = {"date": "2026-10-06"}
+    got = client.get("/api/v1/world/history", params=q, headers=auth(token)).json()
+
+    untouched = TestClient(create_app(settings, repository=InMemoryRepository(), clock=clock))
+    want = untouched.get("/api/v1/world/history", params=q, headers=auth(pair(untouched))).json()
+    assert got == want
+    assert any(c["id"] == DEMO_CHARACTER_IDS[1] and c["events"] for c in got["characters"])
+
+    # Dates after the archive day no longer include the archived character.
+    clock.set(datetime(2026, 10, 9, 9, 0, tzinfo=TPE))
+    later = client.get("/api/v1/world/history", params={"date": "2026-10-08"}, headers=auth(token)).json()
+    assert [c["id"] for c in later["characters"]] == [DEMO_CHARACTER_IDS[0]]
+
+
+def _world_count(repo) -> int:
+    if isinstance(repo, InMemoryRepository):
+        return len(repo._worlds)
+    with repo._pool.connection() as conn:
+        return conn.execute("select count(*) as n from worldpane.worlds").fetchone()["n"]
+
+
+def test_failed_world_creation_leaves_nothing_behind(client, repo, monkeypatch):
+    before = _world_count(repo)
+    with monkeypatch.context() as m:
+        _break_device_insert(repo, m)
+        with pytest.raises(RuntimeError):
+            client.post("/api/v1/world", json={"name": "Half"})
+    assert _world_count(repo) == before
+
+    created = client.post("/api/v1/world", json={"name": "Whole"})
+    assert created.status_code == 201
+    assert _world_count(repo) == before + 1
+    mine = created.json()["device"]["device_token"]
+    assert client.get("/api/v1/device/state", headers=auth(mine)).status_code == 200
+    assert client.get("/api/v1/device/state", headers=auth(pair(client, created.json()["pairing"]["pairing_code"]))).status_code == 200

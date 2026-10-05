@@ -190,3 +190,12 @@ def test_invalid_entry_raises_without_handler():
         assert "allowed_time" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected ValueError")
+
+
+def test_scalar_allowed_time_is_reported_not_raised():
+    reading = next(d for d in official_definitions() if d.key == "reading")
+    errors: list[str] = []
+    for bad in (1, "17:00-18:00", {"start": "17:00"}):
+        cfg = build_event_config({}, [PoolEntry(reading, {"allowed_time": bad})], on_invalid=errors.append)
+        assert cfg["leisure"]["events"] == []
+    assert len(errors) == 3 and all("allowed_time" in e for e in errors)

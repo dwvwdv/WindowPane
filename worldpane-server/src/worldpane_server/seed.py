@@ -66,8 +66,7 @@ def official_default_characters(world_id: str, ids: tuple[str, str] | None = Non
     ]
 
 
-def create_world_with_defaults(
-    repo: Repository,
+def build_world_with_defaults(
     *,
     world_id: str,
     name: str,
@@ -75,7 +74,7 @@ def create_world_with_defaults(
     created_at: datetime,
     start_date: date,
     characters: list[Character] | None = None,
-) -> World:
+) -> tuple[World, list[Character], list[CharacterRelationship]]:
     shared = shared_settings(defaults.default_shared_event_config())
     shared["overrides"] = {}
     world = World(
@@ -88,17 +87,22 @@ def create_world_with_defaults(
         shared_event_config=shared,
         shared_event_definitions=official_shared_definitions(),
     )
-    repo.create_world(world)
     chars = characters if characters is not None else official_default_characters(world_id)
-    for c in chars:
-        repo.add_character(c)
     # Pairwise relationships for every pair (2..N); demo default is "couple" only for exactly
     # the official pair — otherwise a neutral "friend". Purely data.
+    rels: list[CharacterRelationship] = []
     for i, a in enumerate(chars):
         for b in chars[i + 1:]:
             rel_type = "couple" if {a.appearance_key, b.appearance_key} == {"xiaobai", "xiaojimao"} else "friend"
-            repo.add_relationship(CharacterRelationship(
+            rels.append(CharacterRelationship(
                 id=new_id(), world_id=world_id, character_a_id=a.id, character_b_id=b.id,
                 relationship_type=rel_type, affinity=0.0,
             ))
-    return repo.get_world(world_id) or world
+    return world, chars, rels
+
+
+def create_world_with_defaults(repo: Repository, **kwargs) -> World:
+    """Build a World with the official defaults and store it (one transaction)."""
+    world, chars, rels = build_world_with_defaults(**kwargs)
+    repo.create_world(world, chars, rels)
+    return repo.get_world(world.id) or world

@@ -146,6 +146,9 @@ def _validate_effective(ev: Mapping[str, Any], category: str) -> list[str]:
     ):
         errors.append(f"{key}: allowed_context must be a list of strings")
     windows = ev.get("allowed_time")
+    if windows is not None and not isinstance(windows, list):
+        errors.append(f"{key}: allowed_time must be a list of windows")
+        windows = None
     if category in ("leisure", "shared") and not windows:
         errors.append(f"{key}: allowed_time required for {category} events")
     for w in windows or []:
