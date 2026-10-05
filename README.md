@@ -1,7 +1,7 @@
-# Worldpane（窗間）
+# WorldPane（窗間）
 
 多人微型生活世界：World 在 Backend 持續運作，一台或多台 ESP32 裝置是觀看同一個 World 的窗口。
-完整規格見 [`Worldpane_專案規格.md`](./Worldpane_專案規格.md)。
+完整規格見 [`WorldPane_專案規格.md`](./WorldPane_專案規格.md)。
 
 ```text
 ESP32 裝置 ──HTTPS polling──▶ worldpane-server（FastAPI）──▶ Supabase Postgres（worldpane schema）

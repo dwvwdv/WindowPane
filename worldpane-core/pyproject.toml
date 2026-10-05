@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "worldpane-core"
 version = "0.1.0"
-description = "Worldpane（窗間）Simulation Core：決定性的多人每日生活排程引擎"
+description = "WorldPane（窗間）Simulation Core：決定性的多人每日生活排程引擎"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

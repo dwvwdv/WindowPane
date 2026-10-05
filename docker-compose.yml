@@ -1,4 +1,4 @@
-# One-command deploy of the Worldpane backend.
+# One-command deploy of the WorldPane backend.
 #
 # Supabase (default): put the service-role connection string in .env as WORLDPANE_DATABASE_URL
 # (apply supabase/migrations first, e.g. `supabase db push`), then

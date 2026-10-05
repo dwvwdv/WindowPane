@@ -1,7 +1,7 @@
 # worldpane-server
 
-Worldpane（窗間）Backend API 骨架：Display API、World History、Device Pairing。
-規格依據：`../Worldpane_專案規格.md` §18–23、§27、§29、§31。
+WorldPane（窗間）Backend API 骨架：Display API、World History、Device Pairing。
+規格依據：`../WorldPane_專案規格.md` §18–23、§27、§29、§31。
 
 - Python 3.11 / FastAPI / pydantic v2 / pydantic-settings
 - 模擬引擎：**worldpane-core**（`simulation/core.py` adapter；server 不含任何生活規則）

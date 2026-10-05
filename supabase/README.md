@@ -1,6 +1,6 @@
-# Worldpane — Supabase / PostgreSQL schema
+# WorldPane — Supabase / PostgreSQL schema
 
-Worldpane（窗間）的資料庫結構。所有物件都放在獨立的 **`worldpane` schema**（不是 `public`），因為同一個 Supabase Project 裡跑了多個 App，每個 App 各自用一個 schema 隔離。
+WorldPane（窗間）的資料庫結構。所有物件都放在獨立的 **`worldpane` schema**（不是 `public`），因為同一個 Supabase Project 裡跑了多個 App，每個 App 各自用一個 schema 隔離。
 
 ```
 supabase/

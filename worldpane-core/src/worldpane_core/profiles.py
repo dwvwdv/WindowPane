@@ -72,7 +72,7 @@ def demo_world(
         raise ValueError("num_characters must be >= 1")
     world = World(
         id=world_id,
-        name="Worldpane Demo",
+        name="WorldPane Demo",
         simulation_start_date=simulation_start_date,
         timezone=timezone,
         simulation_version=simulation_version,
