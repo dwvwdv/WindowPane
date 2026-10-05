@@ -213,3 +213,26 @@ def test_invalid_display_codes_are_reported_not_scheduled():
         {"overrides": {"date": {"scene": "city cafe"}}}, [date_rule], on_invalid=errors.append
     )
     assert shared["rules"] == []
+
+
+def test_malformed_json_shapes_are_reported_not_raised():
+    defs = official_definitions()
+    reading = next(d for d in defs if d.key == "reading")
+    shared_defs = [d for d in defs if d.category == "shared"]
+    errors: list[str] = []
+    for bad in ({"allowed_time": [{}]}, {"allowed_time": [["17:00"]]}, {"allowed_time": [[1, 2]]}):
+        cfg = build_event_config({}, [PoolEntry(reading, bad)], on_invalid=errors.append)
+        assert cfg["leisure"]["events"] == []
+    cfg = build_event_config({}, [PoolEntry(reading, ["not", "an", "object"])], on_invalid=errors.append)
+    assert cfg["leisure"]["events"] == []
+    broken = dataclasses.replace(reading, params=[1, 2])
+    assert build_event_config({}, [PoolEntry(broken)], on_invalid=errors.append)["leisure"]["events"] == []
+    assert len(errors) == 5
+
+    errors.clear()
+    for container in (["date"], "date", 5):
+        shared = build_shared_event_config({"overrides": container}, shared_defs, on_invalid=errors.append)
+        assert {r["type"] for r in shared["rules"]} == {d.key for d in shared_defs}
+    shared = build_shared_event_config({"overrides": {"date": "off"}}, shared_defs, on_invalid=errors.append)
+    assert "date" not in {r["type"] for r in shared["rules"]}
+    assert len(errors) == 4

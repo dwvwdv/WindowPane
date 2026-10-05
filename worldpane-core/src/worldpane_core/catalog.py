@@ -164,10 +164,12 @@ def _validate_effective(ev: Mapping[str, Any], category: str) -> list[str]:
         errors.append(f"{key}: allowed_time required for {category} events")
     for w in windows or []:
         try:
+            if not (isinstance(w, (list, tuple)) and len(w) == 2 and all(isinstance(t, str) for t in w)):
+                raise ValueError
             start, end = parse_window(w)
             if start >= end:
                 raise ValueError
-        except (TypeError, ValueError, AttributeError, IndexError):
+        except (TypeError, ValueError, AttributeError, IndexError, KeyError):
             errors.append(f"{key}: bad allowed_time window {w!r}")
     if category == "shared":
         min_p = ev.get("min_participants", 2)
@@ -184,6 +186,25 @@ def _validate_effective(ev: Mapping[str, Any], category: str) -> list[str]:
 
 
 OnInvalid = Callable[[str], None]
+
+
+def _report(message: str, on_invalid: OnInvalid | None) -> None:
+    if on_invalid is None:
+        raise ValueError(message)
+    on_invalid(message)
+
+
+def _materialize_checked(
+    defn: EventDefinition, overrides: Any, on_invalid: OnInvalid | None, where: str
+) -> dict[str, Any] | None:
+    """``materialize`` for data read from the DB: JSON of the wrong shape is reported, not raised."""
+    if not isinstance(defn.params, Mapping):
+        _report(f"{defn.key}: params must be an object", on_invalid)
+        return None
+    if overrides is not None and not isinstance(overrides, Mapping):
+        _report(f"{defn.key}: {where} must be an object", on_invalid)
+        return None
+    return materialize(defn, overrides)
 
 
 def _keep(ev: dict[str, Any], category: str, on_invalid: OnInvalid | None) -> bool:
@@ -221,8 +242,8 @@ def build_event_config(
         cat = entry.definition.category
         if cat not in ("temporary", "leisure") or not entry.enabled:
             continue
-        ev = materialize(entry.definition, entry.overrides)
-        if _keep(ev, cat, on_invalid):
+        ev = _materialize_checked(entry.definition, entry.overrides, on_invalid, "profile pool overrides")
+        if ev is not None and _keep(ev, cat, on_invalid):
             cfg[cat]["events"].append(ev)
     return cfg
 
@@ -238,12 +259,16 @@ def build_shared_event_config(
     """
     cfg = copy.deepcopy(dict(settings))
     overrides = cfg.pop("overrides", {}) or {}
-    rules = [
-        materialize(d, overrides.get(d.key))
-        for d in _ordered(definitions)
-        if d.category == "shared"
-    ]
-    cfg["rules"] = [r for r in rules if _keep(r, "shared", on_invalid)]
+    if not isinstance(overrides, Mapping):
+        _report("shared_event_config.overrides must be an object; ignoring it", on_invalid)
+        overrides = {}
+    cfg["rules"] = []
+    for d in _ordered(definitions):
+        if d.category != "shared":
+            continue
+        rule = _materialize_checked(d, overrides.get(d.key), on_invalid, f"overrides.{d.key}")
+        if rule is not None and _keep(rule, "shared", on_invalid):
+            cfg["rules"].append(rule)
     return cfg
 
 

@@ -369,11 +369,14 @@ async function api(path, opts = {}) {
   return fetch(API + path, Object.assign({}, opts, { headers }));
 }
 
-function localNow(tz) {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
-  const get = (t) => parts.find((p) => p.type === t).value;
-  return { date: `${get("year")}-${get("month")}-${get("day")}`, minute: Number(get("hour")) * 60 + Number(get("minute")) };
+// World-local "now", taken from the last server_time (it carries the World's UTC offset),
+// advanced by the time elapsed since that response. The browser's own timezone never matters.
+let serverClock = null, liveTz = "";
+function liveNow() {
+  if (!serverClock) return null;
+  const t = serverClock.iso;
+  const base = Number(t.slice(11, 13)) * 60 + Number(t.slice(14, 16));
+  return { date: t.slice(0, 10), minute: Math.min(1439, base + (Date.now() - serverClock.at) / 60000) };
 }
 const minOfIso = (iso, date) => {
   const [d, t] = [iso.slice(0, 10), iso.slice(11, 16)];
@@ -381,11 +384,11 @@ const minOfIso = (iso, date) => {
   return d < date ? 0 : d > date ? 1440 : m;
 };
 
-async function loadHistory(tz) {
-  const { date } = localNow(tz);
+async function loadHistory(date) {
   const r = await api(`/world/history?date=${date}`);
   if (!r.ok) return;
   const h = await r.json();
+  liveTz = h.timezone;
   liveChars = h.characters.map((c) => ({ id: c.id, name: c.display_name, appearance: c.appearance }));
   liveBars = {};
   for (const c of h.characters) {
@@ -398,8 +401,7 @@ async function loadHistory(tz) {
 
 function drawLive() {
   if (!liveState) return;
-  const tz = DEMO ? DEMO.world.timezone : "Asia/Taipei";
-  const { minute: m, date } = localNow(tz);
+  const { minute: m, date } = liveNow();
   const states = {};
   for (const c of liveState.characters) {
     states[c.id] = { scene: c.scene, activity: c.activity,
@@ -408,7 +410,7 @@ function drawLive() {
   const chars = liveChars.length ? liveChars : liveState.characters.map((c, i) => ({ id: c.id, name: `角色 ${i + 1}`, appearance: c.appearance }));
   renderScreens(chars, states, m);
   renderTimeline(chars, liveBars, m);
-  $("devtime").textContent = `${date} ${hhmm(m)}　revision ${liveState.revision}`;
+  $("devtime").textContent = `${date} ${hhmm(m)} ${liveTz}　revision ${liveState.revision}`;
 }
 
 async function poll() {
@@ -421,7 +423,8 @@ async function poll() {
     } else if (r.ok) {
       etag = r.headers.get("ETag");
       liveState = await r.json();
-      await loadHistory(DEMO ? DEMO.world.timezone : "Asia/Taipei");
+      serverClock = { iso: liveState.server_time, at: Date.now() };
+      await loadHistory(liveState.server_time.slice(0, 10));
       liveStatus(`${new Date().toLocaleTimeString()}　200 OK　ETag ${etag}`);
     } else {
       liveStatus(`輪詢失敗：HTTP ${r.status}`, true);
