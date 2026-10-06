@@ -6,6 +6,7 @@ rewritten, and every change only affects what is generated (or displayed) from n
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 from zoneinfo import ZoneInfo
@@ -25,20 +26,25 @@ MONITOR_LIMIT = 48
 RELATIONSHIP_REQUIREMENTS = {"any", *RELATIONSHIP_TYPES}
 
 
-def _is_int(v: object) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
+def _int_at_least(low: int) -> Callable[[object], bool]:
+    return lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= low
 
 
-# JSON types of shared-event fields. Core coerces with int()/float(), so "90", 1.7 or true would
-# be accepted and silently mean something else; values must have exactly these types.
+def _weight(v: object) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0
+
+
+# Type and range of each shared-event field. Core coerces with int()/float() and checks little
+# else, so "90", 1.7, true or -1 would be accepted and silently mean something else (a negative
+# max_per_day makes the event never eligible); values must match these exactly.
 FIELD_TYPES: dict[str, tuple[Callable[[object], bool], str]] = {
-    "min_duration": (_is_int, "an integer"),
-    "max_duration": (_is_int, "an integer"),
-    "cooldown_min": (_is_int, "an integer"),
-    "max_per_day": (_is_int, "an integer"),
-    "min_participants": (_is_int, "an integer"),
-    "max_participants": (lambda v: v is None or _is_int(v), "an integer or null"),
-    "weight": (lambda v: _is_int(v) or isinstance(v, float), "a number"),
+    "min_duration": (_int_at_least(1), "an integer >= 1"),
+    "max_duration": (_int_at_least(1), "an integer >= 1"),
+    "cooldown_min": (_int_at_least(0), "an integer >= 0"),
+    "max_per_day": (_int_at_least(1), "an integer >= 1 (use enabled: false to turn the event off)"),
+    "min_participants": (_int_at_least(2), "an integer >= 2"),
+    "max_participants": (lambda v: v is None or _int_at_least(2)(v), "an integer >= 2 or null"),
+    "weight": (_weight, "a finite number >= 0"),
     "label": (lambda v: isinstance(v, str) and 0 < len(v.strip()) <= 100, "a non-empty string"),
 }
 
