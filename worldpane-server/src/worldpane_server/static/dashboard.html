@@ -388,15 +388,20 @@ async function signIn(email, password) {
   return storeSupabase(body);
 }
 
+// Supabase Auth could not answer (network, rate limit, 5xx): keep the session and retry later.
+class AuthUnavailable extends Error {}
+
+// Only an explicit rejection of the refresh token ends the session (null); anything else throws.
 async function refresh() {
+  let r;
   try {
-    const r = await gotrue("token?grant_type=refresh_token", { refresh_token: auth.refreshToken });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return storeSupabase(await r.json());
+    r = await gotrue("token?grant_type=refresh_token", { refresh_token: auth.refreshToken });
   } catch {
-    clearAuth();
-    return null;
+    throw new AuthUnavailable("連不到 Supabase Auth，稍後會自動重試。");
   }
+  if ([400, 401, 403].includes(r.status)) { clearAuth(); return null; }
+  if (!r.ok) throw new AuthUnavailable(`Supabase Auth 暫時無法使用（HTTP ${r.status}），稍後會自動重試。`);
+  return storeSupabase(await r.json());
 }
 
 // A valid bearer for the admin API, refreshing the Supabase session when it is about to expire.
@@ -405,7 +410,13 @@ async function accessToken() {
   if (auth.kind === "token") return auth.token;
   if (auth.expiresAt - REFRESH_MARGIN_S > Date.now() / 1000) return auth.accessToken;
   refreshing ??= refresh().finally(() => { refreshing = null; });
-  return (await refreshing)?.accessToken ?? null;
+  try {
+    return (await refreshing)?.accessToken ?? null;
+  } catch (e) {
+    // Refresh failed for now; the current token may still have a few seconds left.
+    if (auth && auth.expiresAt > Date.now() / 1000 + 5) return auth.accessToken;
+    throw e;
+  }
 }
 
 async function signOut() {
@@ -429,7 +440,12 @@ class ApiError extends Error {
 }
 
 async function api(path, opts = {}) {
-  const bearer = await accessToken();
+  let bearer;
+  try {
+    bearer = await accessToken();
+  } catch (e) {
+    throw new ApiError(503, { detail: { code: "auth_unavailable", message: e.message } });
+  }
   if (!bearer) { logout("登入已過期，請重新登入。"); throw new ApiError(401, null); }
   const headers = { Authorization: `Bearer ${bearer}` };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
@@ -484,6 +500,8 @@ async function enter(errText) {
   } catch (e) {
     if (e.status === 401 || e.status === 403) return;  // api() already sent us back to the gate
     showGate(e.code === "admin_disabled" ? "伺服器沒有啟用管理功能。" : `${errText}${e.message}`);
+    // Supabase Auth hiccup: the session is kept, so try again instead of asking to sign in.
+    if (e.code === "auth_unavailable" && auth) setTimeout(() => { if (auth && !$("gate").hidden) enter(errText); }, 15000);
   }
 }
 

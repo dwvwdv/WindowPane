@@ -169,6 +169,8 @@ def test_verify_rejects_without_caching(monkeypatch):
 
 @pytest.mark.parametrize("error", [
     urllib.error.HTTPError(SB_URL, 502, "Bad Gateway", {}, io.BytesIO(b"")),
+    urllib.error.HTTPError(SB_URL, 429, "Too Many Requests", {}, io.BytesIO(b"")),
+    urllib.error.HTTPError(SB_URL, 408, "Request Timeout", {}, io.BytesIO(b"")),
     urllib.error.URLError("connection refused"),
     TimeoutError("timed out"),
 ])

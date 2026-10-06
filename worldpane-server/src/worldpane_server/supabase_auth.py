@@ -20,6 +20,8 @@ from dataclasses import dataclass
 CACHE_SECONDS = 60
 CACHE_MAX = 256
 TIMEOUT_SECONDS = 5
+# Answers that say nothing about the token itself (timeout, rate limit): retry, don't sign out.
+TRANSIENT_STATUS = {408, 429}
 
 
 @dataclass(frozen=True)
@@ -68,9 +70,9 @@ class SupabaseAuth:
             with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            if 400 <= exc.code < 500:
-                return None  # expired, malformed, logged out, unknown user
-            raise AuthUnavailable(f"Supabase Auth answered HTTP {exc.code}") from exc
+            if exc.code in TRANSIENT_STATUS or exc.code >= 500:
+                raise AuthUnavailable(f"Supabase Auth answered HTTP {exc.code}") from exc
+            return None  # GoTrue rejected the token: expired, malformed, logged out, unknown user
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
             raise AuthUnavailable(f"Supabase Auth unreachable: {exc}") from exc
         user_id = body.get("id") if isinstance(body, dict) else None
