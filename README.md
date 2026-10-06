@@ -26,6 +26,9 @@ docker compose up -d --build    # 先把 supabase/migrations 套到 Supabase 專
 
 - API 文件：<http://127.0.0.1:8000/docs>
 - 瀏覽器 Demo：<http://127.0.0.1:8000/demo>（離線回放一週，或連線後端模擬一台裝置）
+- Dashboard：<http://127.0.0.1:8000/dashboard>（需在 `.env` 設 `WORLDPANE_ADMIN_TOKEN`）：新增 / 調整 World，監視牆一次看多個 World 的畫面
+
+用 CI 發布的 image、不在本機 build：`.env` 設 `WORLDPANE_IMAGE=ghcr.io/dwvwdv/worldpane-server:latest`，再 `docker compose pull && docker compose up -d`。
 
 不用 Docker、只跑模擬：
 
@@ -39,12 +42,13 @@ cd worldpane-core && PYTHONPATH=src python3 -m worldpane_core timeline --date 20
 - **Display API**：回傳每個角色目前的 `scene` / `activity`（Semantic State），附 `revision` / `ETag`，裝置每 15 秒輪詢。
 - **History**：查詢任一天的事件。
 - **裝置配對**：建立 World、6 碼 Pairing Code、Device Token。裝置綁定的是 World，不是角色。
+- **Dashboard**（`/dashboard` + `/api/v1/admin`）：列出 / 新增 World（自訂 1..12 個角色）、改名、新增 / 改名 / 封存角色、調共同事件設定、發配對碼、看時間軸；監視牆每 15 秒更新，一次顯示多個 World 的即時畫面。
 - **調參不需部署**：所有機率、權重、時長、cooldown（規格 §34 TBD）與事件定義都是 DB 資料；新增事件只要新增一列。
 
 ## 現況（V1 Phase 1–2）
 
 已完成：規格 §35 的 Phase 1（Backend Simulation）與 Phase 2（Display API：current state、history、
-device registration、World pairing、revision / ETag），以及 Docker 部署與瀏覽器 Demo。
+device registration、World pairing、revision / ETag），以及 Docker 部署、瀏覽器 Demo、管理 Dashboard 與 CI/CD。
 
 尚未完成：
 
@@ -55,10 +59,20 @@ device registration、World pairing、revision / ETag），以及 Docker 部署�
 | 國定假日 | 只把週末當假日；core 有 `World.holiday_dates`，但 DB / server 還沒有假日行事曆 |
 | 夜間睡覺 | 沒有睡覺事件，最後一個事件結束後到隔天早上都是 idle |
 | Device Preference API（§23） | 表已建立（`device_preferences`），但沒有 endpoint |
-| 安全 | `/device/pair`、`POST /world` 沒有 rate limit；沒有 token 撤銷 / 裝置解綁 |
+| 安全 | `/device/pair`、`POST /world` 沒有 rate limit；沒有 token 撤銷 / 裝置解綁（Dashboard 也還不能解綁裝置）|
+| Dashboard 權限 | 只有一組共用的 `WORLDPANE_ADMIN_TOKEN`，沒有個別帳號；admin API 沒有 rate limit |
+| Migration 自動部署 | CI 只發布 image；Supabase migration 仍需手動 `supabase db push` |
 | `POST /device/input` | 只記錄，不影響模擬 |
-| CI | 沒有 GitHub Actions；測試只在本機跑 |
 | ESP32 firmware（Phase 3–5） | 尚未開始；API 合約在 [`worldpane-server/openapi.json`](./worldpane-server/openapi.json) |
+
+## CI/CD（GitHub Actions）
+
+| Workflow | 觸發 | 內容 |
+|---|---|---|
+| [`core.yml`](./.github/workflows/core.yml) | `worldpane-core/**`、`supabase/seed.sql` | Python 3.11 / 3.12 跑 core 測試；檢查 `seed.sql` 與 core 預設一致 |
+| [`server.yml`](./.github/workflows/server.yml) | `worldpane-server/**`、`worldpane-core/**`、`supabase/**`、`docker/**`、`docker-compose.yml` | server 測試同時跑 in-memory 與 Postgres 16（用 `docker/db/init-worldpane.sh` 套 migrations）；檢查 `openapi.json`；build image 後用 `docker compose --profile local-db` 冒煙測試；push 到 `master` 時發布 `ghcr.io/dwvwdv/worldpane-server:latest` 與 `:sha-<commit>` |
+
+PR 只跑測試和 build，不會 push image。
 
 ## 測試
 
