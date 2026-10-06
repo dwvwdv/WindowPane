@@ -112,11 +112,13 @@ class InMemoryRepository:
             return w.revision
 
     # characters
-    def add_character(self, character: Character) -> None:
+    def add_character(self, character: Character,
+                      relationships: Sequence[CharacterRelationship] = ()) -> None:
         with self._lock:
             if character.world_id not in self._worlds:
                 raise KeyError(character.world_id)
             self._characters[character.world_id].append(copy.deepcopy(character))
+            self._relationships[character.world_id].extend(copy.deepcopy(r) for r in relationships)
 
     def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         with self._lock:
@@ -144,11 +146,16 @@ class InMemoryRepository:
             if sort_order is not None:
                 c.sort_order = sort_order
 
-    def archive_character(self, character_id: str, at: datetime) -> None:
+    def archive_character(self, character_id: str, at: datetime, *, keep_one_active: bool = False) -> bool:
         with self._lock:
             c = self._character(character_id)
-            if c.archived_at is None:
-                c.archived_at = at
+            if c.archived_at is not None:
+                return True
+            others = [x for x in self._characters[c.world_id] if x.id != c.id and x.archived_at is None]
+            if keep_one_active and not others:
+                return False
+            c.archived_at = at
+            return True
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
         with self._lock:

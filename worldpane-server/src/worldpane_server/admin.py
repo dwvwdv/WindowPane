@@ -26,6 +26,22 @@ def _number(v: object) -> float | None:
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+def _enabled_problems(where: str, ov: object) -> list[str]:
+    """``enabled`` must be a real boolean: core only tests truthiness, so "false" would enable."""
+    if not isinstance(ov, dict):
+        return []  # core reports non-object overrides itself
+    problems = []
+    if "enabled" in ov and not isinstance(ov["enabled"], bool):
+        problems.append(f"{where}.enabled must be true or false")
+    contexts = ov.get("context_overrides")
+    if isinstance(contexts, dict):
+        for ctx, ctx_ov in contexts.items():
+            problems += _enabled_problems(f"{where}.context_overrides.{ctx}", ctx_ov)
+    elif contexts is not None:
+        problems.append(f"{where}.context_overrides must be an object of context -> overrides")
+    return problems
+
+
 class AdminService:
     def __init__(self, service: WorldService) -> None:
         self.service = service
@@ -138,6 +154,8 @@ class AdminService:
         elif isinstance(overrides, dict):
             known = {d.key for d in world.shared_event_definitions}
             problems += [f"overrides.{k}: unknown shared event" for k in sorted(set(overrides) - known)]
+            for key, ov in overrides.items():
+                problems += _enabled_problems(f"overrides.{key}", ov)
         # worldpane-core skips bad values at generation time; here they are a 422 instead.
         build_shared_event_config(cfg, world.shared_event_definitions, on_invalid=problems.append)
         if problems:
@@ -161,13 +179,12 @@ class AdminService:
             display_name=body.display_name, profile=self._profile(body.profile_key),
             sort_order=max((c.sort_order for c in existing), default=-1) + 1,
         )
-        self.repo.add_character(character)
-        for other in existing:
-            if other.archived_at is None:
-                self.repo.add_relationship(CharacterRelationship(
-                    id=new_id(), world_id=world.id, character_a_id=other.id,
-                    character_b_id=character.id, relationship_type="friend",
-                ))
+        relationships = [
+            CharacterRelationship(id=new_id(), world_id=world.id, character_a_id=other.id,
+                                  character_b_id=character.id, relationship_type="friend")
+            for other in existing if other.archived_at is None
+        ]
+        self.repo.add_character(character, relationships)
         return self.world(world.id)
 
     def update_character(self, world_id: str, character_id: str,
@@ -179,9 +196,6 @@ class AdminService:
 
     def archive_character(self, world_id: str, character_id: str) -> schemas.AdminWorld:
         c = self._character(world_id, character_id)
-        if c.archived_at is None:
-            active = [x for x in self.repo.list_characters(world_id) if x.id != c.id]
-            if not active:
-                raise ServiceError(409, "last_character", "A World needs at least one active character")
-            self.repo.archive_character(c.id, self.service.clock.now())
+        if not self.repo.archive_character(c.id, self.service.clock.now(), keep_one_active=True):
+            raise ServiceError(409, "last_character", "A World needs at least one active character")
         return self.world(world_id)

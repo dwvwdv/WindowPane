@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime
 
 import pytest
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from worldpane_server.config import Settings
 from worldpane_server.main import create_app
+from worldpane_server.repositories.memory import InMemoryRepository
 from worldpane_server.seed import DEMO_CHARACTER_IDS, DEMO_WORLD_ID
 
 from .conftest import DEMO_CODE, TPE, auth, pair
@@ -123,6 +125,10 @@ def test_rename_and_tune_shared_events(client):
     ({"overrides": {"nope": {}}}, "overrides.nope"),
     ({"overrides": {"date": {"weight": "high"}}}, "date"),
     ({"overrides": []}, "overrides"),
+    ({"overrides": {"date": {"enabled": "false"}}}, "overrides.date.enabled"),
+    ({"overrides": {"date": {"context_overrides": {"holiday": {"enabled": 0}}}}},
+     "overrides.date.context_overrides.holiday.enabled"),
+    ({"overrides": {"date": {"context_overrides": []}}}, "overrides.date.context_overrides"),
 ])
 def test_invalid_shared_config_is_a_422_and_not_stored(client, cfg, fragment):
     before = client.get(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN).json()["shared_event_config"]
@@ -181,6 +187,47 @@ def test_cannot_archive_the_last_character_or_touch_another_worlds(client):
     assert r.status_code == 404
     assert client.post(f"{A}/worlds/{DEMO_WORLD_ID}/characters", headers=ADMIN, json={
         "display_name": "X", "appearance": "Bad Key", "profile_key": "official.student.v1"}).status_code == 422
+
+
+def test_new_character_gets_relationships_with_active_characters(client, repo):
+    w = client.post(f"{A}/worlds/{DEMO_WORLD_ID}/characters", headers=ADMIN, json={
+        "display_name": "小橘", "appearance": "xiaoju", "profile_key": "official.freelancer.v1"}).json()
+    new = w["characters"][-1]["id"]
+    pairs = {frozenset((r.character_a_id, r.character_b_id)) for r in repo.list_relationships(DEMO_WORLD_ID)}
+    assert {frozenset((new, cid)) for cid in DEMO_CHARACTER_IDS} <= pairs
+
+
+def test_failed_relationship_insert_leaves_no_character(client, repo, monkeypatch):
+    if isinstance(repo, InMemoryRepository):
+        pytest.skip("in-memory inserts cannot fail half-way")
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("relationship insert failed")
+
+    monkeypatch.setattr(type(repo), "_insert_relationship", staticmethod(boom))
+    with pytest.raises(RuntimeError):
+        client.post(f"{A}/worlds/{DEMO_WORLD_ID}/characters", headers=ADMIN, json={
+            "display_name": "小橘", "appearance": "xiaoju", "profile_key": "official.freelancer.v1"})
+    names = [c.display_name for c in repo.list_characters(DEMO_WORLD_ID, include_archived=True)]
+    assert names == ["小白", "小雞毛"]
+
+
+def test_concurrent_archives_keep_one_active_character(client, repo, clock):
+    for _ in range(5):
+        chars = [c["id"] for c in _create(client)["world"]["characters"]]
+        barrier = threading.Barrier(len(chars))
+        results: list[bool] = []
+
+        def archive(cid: str) -> None:
+            barrier.wait()
+            results.append(repo.archive_character(cid, clock.now(), keep_one_active=True))
+
+        threads = [threading.Thread(target=archive, args=(cid,)) for cid in chars]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert sorted(results) == [False, True]
 
 
 # --- pairing, history, monitor ---------------------------------------------------------

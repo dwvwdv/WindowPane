@@ -85,7 +85,11 @@ class Repository(Protocol):
         ...
 
     # --- characters / relationships ------------------------------------------------------
-    def add_character(self, character: Character) -> None: ...
+    def add_character(self, character: Character,
+                      relationships: Sequence[CharacterRelationship] = ()) -> None:
+        """Insert ``character`` and its ``relationships`` all-or-nothing, so no daily plan can be
+        generated from a World where the character exists but its relationships do not yet."""
+        ...
 
     def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         """Characters of a World (1..N), in stable display order.
@@ -99,8 +103,12 @@ class Repository(Protocol):
         """Change the given fields of a character (``None`` = keep)."""
         ...
 
-    def archive_character(self, character_id: str, at: datetime) -> None:
-        """Soft delete: no plans after ``at``'s date, history stays readable (spec §17)."""
+    def archive_character(self, character_id: str, at: datetime, *, keep_one_active: bool = False) -> bool:
+        """Soft delete: no plans after ``at``'s date, history stays readable (spec §17).
+
+        With ``keep_one_active``, refuse (return False, change nothing) when this is the World's
+        last active character. The check and the update are atomic: two concurrent archives of
+        the last two characters cannot both succeed. Archiving an archived character is a no-op."""
         ...
 
     def add_relationship(self, relationship: CharacterRelationship) -> None: ...

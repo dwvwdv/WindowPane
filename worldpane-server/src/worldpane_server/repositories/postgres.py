@@ -275,9 +275,12 @@ class PostgresRepository:
                 (profile.id, def_id, Jsonb(dict(entry.overrides)), entry.enabled),
             )
 
-    def add_character(self, character: Character) -> None:
+    def add_character(self, character: Character,
+                      relationships: Sequence[CharacterRelationship] = ()) -> None:
         with self._pool.connection() as conn, conn.transaction():
             self._insert_character(conn, character)
+            for r in relationships:
+                self._insert_relationship(conn, r)
 
     def _insert_character(self, conn, character: Character) -> None:
         self._ensure_profile(conn, character.profile, character.world_id)
@@ -366,13 +369,32 @@ class PostgresRepository:
         if row is None:
             raise KeyError(character_id)
 
-    def archive_character(self, character_id: str, at: datetime) -> None:
-        with self._pool.connection() as conn:
+    def archive_character(self, character_id: str, at: datetime, *, keep_one_active: bool = False) -> bool:
+        with self._pool.connection() as conn, conn.transaction():
+            row = conn.execute(
+                "select world_id, archived_at from worldpane.characters where id = %s", (character_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(character_id)
+            if row["archived_at"] is not None:
+                return True
+            # Serialise archives within one World: after this lock, the count below sees any
+            # archive committed meanwhile, so the last two characters cannot both go.
+            conn.execute("select 1 from worldpane.worlds where id = %s for update", (row["world_id"],))
+            if keep_one_active:
+                others = conn.execute(
+                    """select count(*) as n from worldpane.characters
+                        where world_id = %s and archived_at is null and id <> %s""",
+                    (row["world_id"], character_id),
+                ).fetchone()["n"]
+                if not others:
+                    return False
             conn.execute(
                 """update worldpane.characters set archived_at = %s
                     where id = %s and archived_at is null""",
                 (at, character_id),
             )
+        return True
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
         with self._pool.connection() as conn:
