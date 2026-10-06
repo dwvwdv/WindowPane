@@ -22,7 +22,7 @@ def _common(p: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="worldpane_core", description="Worldpane Simulation Core")
+    parser = argparse.ArgumentParser(prog="worldpane_core", description="WorldPane Simulation Core")
     sub = parser.add_subparsers(dest="command", required=True)
     tl = sub.add_parser("timeline", help="印出指定日期每個角色的 Timeline")
     _common(tl)

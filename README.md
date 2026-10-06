@@ -1,0 +1,69 @@
+# WorldPane（窗間）
+
+多人微型生活世界：World 在 Backend 持續運作，一台或多台 ESP32 裝置是觀看同一個 World 的窗口。
+完整規格見 [`WorldPane_專案規格.md`](./WorldPane_專案規格.md)。
+
+```text
+ESP32 裝置 ──HTTPS polling──▶ worldpane-server（FastAPI）──▶ Supabase Postgres（worldpane schema）
+                                     │
+                                     └─ worldpane-core（純 Python 模擬引擎）
+```
+
+| 目錄 | 內容 | 文件 |
+|---|---|---|
+| [`worldpane-core/`](./worldpane-core) | Simulation Core：給定 World + 角色 + 日期，決定性產生一天的事件時間軸（純 stdlib） | [README](./worldpane-core/README.md) |
+| [`worldpane-server/`](./worldpane-server) | Backend API：建立 World、裝置配對、`/world/state`、`/world/history`、瀏覽器 Demo | [README](./worldpane-server/README.md) |
+| [`supabase/`](./supabase) | DB schema（migrations）、事件目錄、seed | [README](./supabase/README.md) |
+| [`docker-compose.yml`](./docker-compose.yml) | 一鍵部署（預設接 Supabase；`--profile local-db` 改用本機 Postgres） | 見 server README |
+
+## 快速開始
+
+```bash
+cp .env.example .env            # 填 WORLDPANE_DATABASE_URL（Supabase service-role 連線字串）
+docker compose up -d --build    # 先把 supabase/migrations 套到 Supabase 專案
+# 沒有 Supabase 時：docker compose --profile local-db up -d --build
+```
+
+- API 文件：<http://127.0.0.1:8000/docs>
+- 瀏覽器 Demo：<http://127.0.0.1:8000/demo>（離線回放一週，或連線後端模擬一台裝置）
+
+不用 Docker、只跑模擬：
+
+```bash
+cd worldpane-core && PYTHONPATH=src python3 -m worldpane_core timeline --date 2026-10-05
+```
+
+## 後端負責什麼
+
+- **模擬 World**：每天第一次被讀取時產生當天計畫（作息、三餐、請假、上班上課插曲、休閒、2..N 人共同事件、衝突解決），存進 DB 後不再改動。相同輸入永遠得到相同結果。
+- **Display API**：回傳每個角色目前的 `scene` / `activity`（Semantic State），附 `revision` / `ETag`，裝置每 15 秒輪詢。
+- **History**：查詢任一天的事件。
+- **裝置配對**：建立 World、6 碼 Pairing Code、Device Token。裝置綁定的是 World，不是角色。
+- **調參不需部署**：所有機率、權重、時長、cooldown（規格 §34 TBD）與事件定義都是 DB 資料；新增事件只要新增一列。
+
+## 現況（V1 Phase 1–2）
+
+已完成：規格 §35 的 Phase 1（Backend Simulation）與 Phase 2（Display API：current state、history、
+device registration、World pairing、revision / ETag），以及 Docker 部署與瀏覽器 Demo。
+
+尚未完成：
+
+| 項目 | 說明 |
+|---|---|
+| 部署前套用 schema | 遠端 Supabase 專案需先 `supabase db push`（或用 psql 依序套用兩個 migration）；截至 2026-10-05 尚未套用 |
+| §34 TBD 數值 | 跳餐機率、請假機率、各事件 weight / duration / cooldown 目前都是佔位值，待定案後直接改 DB |
+| 國定假日 | 只把週末當假日；core 有 `World.holiday_dates`，但 DB / server 還沒有假日行事曆 |
+| 夜間睡覺 | 沒有睡覺事件，最後一個事件結束後到隔天早上都是 idle |
+| Device Preference API（§23） | 表已建立（`device_preferences`），但沒有 endpoint |
+| 安全 | `/device/pair`、`POST /world` 沒有 rate limit；沒有 token 撤銷 / 裝置解綁 |
+| `POST /device/input` | 只記錄，不影響模擬 |
+| CI | 沒有 GitHub Actions；測試只在本機跑 |
+| ESP32 firmware（Phase 3–5） | 尚未開始；API 合約在 [`worldpane-server/openapi.json`](./worldpane-server/openapi.json) |
+
+## 測試
+
+```bash
+(cd worldpane-core && python3 -m pytest)
+(cd worldpane-server && python3 -m pip install -e ../worldpane-core -e ".[dev]" && python3 -m pytest)
+# Postgres 測試：WORLDPANE_TEST_DATABASE_URL=postgresql://... python3 -m pytest（必須是可丟棄的 DB）
+```

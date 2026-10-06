@@ -1,6 +1,6 @@
 # worldpane-core
 
-Worldpane（窗間）的 **Simulation Core**：純 Python 3.11 套件，無 DB、無 Web、無第三方依賴。
+WorldPane（窗間）的 **Simulation Core**：純 Python 3.11 套件，無 DB、無 Web、無第三方依賴。
 
 給定 `World + Characters(1..N) + Relationships + 當地日期`，決定性地產生當日完整 Event Timeline
 （規格 §4–§17、§31、§34、§35 Phase 1）。
@@ -67,7 +67,7 @@ states = current_state(events, now, [c.id for c in characters])
 - 抽籤順序會影響 RNG，所以一律依 `(sort_order, key)` 排序，確保同樣的 DB 資料得到同樣的結果。
 
 實際數值存在 DB（`supabase/migrations/20261005130000_event_catalog.sql`）。`defaults.py` 只是官方預設與
-seed 來源：`python scripts/gen_seed_sql.py > ../supabase/seed.sql`（`--check` 檢查是否過期）。
+seed 來源：`python scripts/gen_seed_sql.py > ../supabase/seed.sql`（`python scripts/gen_seed_sql.py --check ../supabase/seed.sql` 檢查是否過期）。
 `tests/test_catalog.py` 驗證「DB 組裝出的設定」與 inline 預設產生完全相同的 Timeline，並示範只加資料就能新增個人事件與 3..N 人共同事件。
 
 ## 生成流程（§15）
@@ -92,9 +92,18 @@ seed 來源：`python scripts/gen_seed_sql.py > ../supabase/seed.sql`（`--check
 
 ## 設定值（TBD）
 
-所有機率、權重、頻率、cooldown、休閒事件時段皆集中在
-[`src/worldpane_core/defaults.py`](src/worldpane_core/defaults.py)，標記 `# TBD §34` 者為 **placeholder**，
-正式數值待需求方定案。Engine 不 hard-code 任何數值。
+規格 §34 未定案的機率、權重、頻率、cooldown、休閒時段都是資料，正式環境以 DB 為準
+（`event_definitions` / `profile_event_pools` / `character_profiles.*_config` / `worlds.shared_event_config`）。
+[`src/worldpane_core/defaults.py`](src/worldpane_core/defaults.py) 只是官方預設與 `seed.sql` 的來源，
+標記 `# TBD §34` 者為 **placeholder**，正式數值待需求方定案。Engine 不 hard-code 任何數值。
+
+從 DB 讀進來的設定一律先經 `catalog.build_event_config` / `build_shared_event_config` 驗證：
+事件定義（套用所有覆寫後）、巢狀生成設定（`leisure.windows`、`gap_min/gap_max`、
+`attempts_per_block`、`trigger_probability`、shared 的 `attempts` / `slot_step_min` / `max_slot_tries`）
+不合法時交給 `on_invalid` 回報，事件略過、設定改用預設值，不會讓整個 World 的計畫產生失敗。
+
+Cooldown 規則：個人事件（temporary / leisure）只跟同一角色的同類事件比較；
+共同事件的 cooldown 是整個 World 共用，即使參與者不同也要遵守。衝突解決移動事件時同樣檢查。
 
 ## 檔案結構
 

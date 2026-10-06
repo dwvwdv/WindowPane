@@ -95,10 +95,10 @@ def create_app(
     )
 
     app = FastAPI(
-        title="Worldpane API",
+        title="WorldPane API",
         version=__version__,
         description=(
-            "Worldpane (窗間) backend. Devices poll `GET /api/v1/world/state` (~15 s) with "
+            "WorldPane (窗間) backend. Devices poll `GET /api/v1/world/state` (~15 s) with "
             "`If-None-Match`; the Backend is the single source of truth for World state."
         ),
     )

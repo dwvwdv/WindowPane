@@ -1,7 +1,7 @@
 # worldpane-server
 
-Worldpane（窗間）Backend API 骨架：Display API、World History、Device Pairing。
-規格依據：`../Worldpane_專案規格.md` §18–23、§27、§29、§31。
+WorldPane（窗間）Backend API 骨架：Display API、World History、Device Pairing。
+規格依據：`../WorldPane_專案規格.md` §18–23、§27、§29、§31。
 
 - Python 3.11 / FastAPI / pydantic v2 / pydantic-settings
 - 模擬引擎：**worldpane-core**（`simulation/core.py` adapter；server 不含任何生活規則）
@@ -213,3 +213,6 @@ src/worldpane_server/
 - `POST /world` 不需認證，任何人都能建立 World；上線前需評估（例如 firmware 簽章、限流）。
 - `device/input` V1 只記錄，不影響模擬。
 - 尚未提供 token 撤銷、裝置解綁、Device Preference API。
+- 假日只有週末；國定假日行事曆（core 的 `World.holiday_dates`）尚未存進 DB。
+- 沒有睡覺事件，夜間顯示 idle。
+- 沒有 CI，測試需在本機執行。

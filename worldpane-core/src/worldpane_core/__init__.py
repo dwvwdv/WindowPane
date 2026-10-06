@@ -1,4 +1,4 @@
-"""Worldpane（窗間）Simulation Core。
+"""WorldPane（窗間）Simulation Core。
 
 純 Python、無 DB、無 Web。給定 World + Characters(1..N) + Relationships + 日期，
 決定性地產生當日 Event Timeline。

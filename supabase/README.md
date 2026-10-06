@@ -1,6 +1,6 @@
-# Worldpane — Supabase / PostgreSQL schema
+# WorldPane — Supabase / PostgreSQL schema
 
-Worldpane（窗間）的資料庫結構。所有物件都放在獨立的 **`worldpane` schema**（不是 `public`），因為同一個 Supabase Project 裡跑了多個 App，每個 App 各自用一個 schema 隔離。
+WorldPane（窗間）的資料庫結構。所有物件都放在獨立的 **`worldpane` schema**（不是 `public`），因為同一個 Supabase Project 裡跑了多個 App，每個 App 各自用一個 schema 隔離。
 
 ```
 supabase/
@@ -66,7 +66,7 @@ worlds ─┬─1:N─ characters ─┬─ N:N (character_relationships, 無向
 需要 Docker 與 [Supabase CLI](https://supabase.com/docs/guides/local-development)。
 
 ```bash
-cd WindowPane                # repo 根目錄（supabase/ 的上一層）
+cd WorldPane                 # repo 根目錄（supabase/ 的上一層）
 supabase init                # 只有在還沒有 supabase/config.toml 時；不會覆蓋 migrations/ 與 seed.sql
 supabase start               # 啟動本機 stack
 supabase db reset            # 重建本機 DB：依序套用 migrations/*.sql，再執行 seed.sql
@@ -80,13 +80,14 @@ enabled = true
 sql_paths = ["./seed.sql"]
 ```
 
-推到遠端專案：`supabase db push`（只推 migration，不會跑 seed）。**seed 只給本機開發用。**
+推到遠端專案：`supabase db push`（只推 migration，不會跑 seed）。**seed 只給本機開發用。** 遠端不需要 seed：`worldpane-server` 啟動時會自動補上官方事件目錄與 Profile 模板（`world_id = NULL`），已存在的列不會被覆蓋。
 
 不用 CLI、直接用 psql 也可以（需要已存在 `service_role` 角色，Supabase 內建）：
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005120000_init_worldpane.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005130000_event_catalog.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql   # 選用：本機開發才需要
 ```
 
 ## 關於 Exposed Schemas
@@ -99,7 +100,7 @@ V1 **不需要**把 `worldpane` 加到 Dashboard → Settings → API → Expose
 
 - **每個角色不重疊（no-overlap）由應用層保證**：Simulation Core 的 Conflict Resolver（§14）在寫入前解決衝突。資料庫不加 exclusion constraint，因為 base schedule（WORK / SCHOOL）要存成切段還是當作底層、上面疊 temporary event，屬於 Core 的決定；若最後確定採完全不重疊的切段，可加：`btree_gist` + 在 `event_participants` 反正規化 `tstzrange` + `EXCLUDE USING gist (character_id WITH =, during WITH &&) WHERE (status = 'scheduled')`。
 - **確定性寫入**：`INSERT INTO daily_plans ... ON CONFLICT DO NOTHING RETURNING id`，拿到 id 才寫 events（同一交易）。換 `simulation_version` 重算某天時，先把舊計畫設 `superseded_at`，再插入新版本。`events.simulation_version` 由 `daily_plans` 取得，不重複存。
-- **Display API ETag**：`world_revisions.revision` 只反映「資料變動」。但「目前狀態」會隨時間改變（事件開始 / 結束）而沒有任何寫入，所以 ETag 應由 `world revision` + `device_preferences.revision` + 目前進行中的 event id 組合。
+- **Display API ETag**：`world_revisions.revision` 只反映「資料變動」，但「目前狀態」會隨時間改變（事件開始 / 結束）而沒有任何寫入。所以 server 每次計算 state 時對角色狀態取 fingerprint，與上次不同就原子地把 revision +1，ETag = `"<world_id>.<revision>"`（見 `worldpane-server/README.md`）。Device Preference 尚無 API，之後加入時再把 `device_preferences.revision` 併入該裝置的 ETag。
 - **History 永久保存**：有參與過事件的角色無法硬刪（FK `NO ACTION`），請用 `archived_at`。刪除整個 World 時，`worlds_delete_events_first` trigger 會先刪 events 再讓 FK cascade 跑。
 - **跨 World 完整性**：participants / relationships / events 都用 `(id, world_id)` 複合 FK，保證角色、事件、計畫屬於同一個 World；`device_preferences.primary_character_id` 由 trigger 檢查必須在該裝置目前的 World 內，重新配對到別的 World 時會自動清空。
 - **Pairing code 雜湊**：6 位數碼只有 10^6 種，必須用 backend 的 HMAC secret（`WORLDPANE_PAIRING_CODE_SECRET`）雜湊，不可用單純 sha256。`pairing_codes_live_hash_uq` 只限制「尚未 consumed」的列，所以舊碼 consumed 後號碼可以重用。

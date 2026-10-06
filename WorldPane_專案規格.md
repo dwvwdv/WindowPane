@@ -1,6 +1,6 @@
-# Worldpane（窗間）— 多人放置型生活模擬器專案規格
+# WorldPane（窗間）— 多人放置型生活模擬器專案規格
 
-> 正式名稱：**Worldpane / 窗間**  
+> 正式名稱：**WorldPane / 窗間**  
 > 狀態：V1 架構與核心規則定稿  
 > 更新日期：2026-10-05  
 > 目標硬體：ESP32-S3（目前開發主線為 ESP-IDF + C/C++）
@@ -8,9 +8,16 @@
 
 ## 版本進展
 
-### 2026-10-05 — Worldpane 命名與多人化
+### 2026-10-05 — Phase 1–2 Backend 實作完成
 
-- 正式命名：**窗間 / Worldpane**。
+- `worldpane-core`（Simulation Core）、`worldpane-server`（FastAPI Display API）、`supabase/`（schema）已合併。
+- §34 TBD 數值與所有事件定義存在 DB，可直接調整，新增事件只需新增資料。
+- Docker 一鍵部署（預設接 Supabase）與瀏覽器 Demo（`/demo`）。
+- 實作狀態與尚未完成的項目見 repo 根目錄 `README.md`。
+
+### 2026-10-05 — WorldPane 命名與多人化
+
+- 正式命名：**窗間 / WorldPane**。
 - 產品從「雙角色放置型生活模擬器」提升為「多人微型生活世界」。
 - `World → Character` 正式定義為 `1:N`。
 - 同一 World 可容納 2 人、3 人、5 人或更多 Character。
@@ -27,7 +34,7 @@
 
 > **Backend 維護一個持續存在的多人微型生活世界；ESP32 是觀看這個世界的實體窗口。**
 
-產品名稱 **Worldpane** 來自 `World + Window Pane`：每一台裝置都是通往同一個持續世界的一扇窗。
+產品名稱 **WorldPane** 來自 `World + Window Pane`：每一台裝置都是通往同一個持續世界的一扇窗。
 
 核心特性：
 
@@ -1103,6 +1110,15 @@ POST /api/v1/device/pair
 
 ---
 
+```http
+POST /api/v1/world
+POST /api/v1/world/pairing-codes
+```
+
+第一台裝置建立 World（回傳該裝置的 token 與給其他裝置用的 Pairing Code）；已綁定的裝置可再發一組 Pairing Code 邀請其他裝置（見 §22）。
+
+---
+
 ## 22. Device Pairing
 
 多個使用者可以各自擁有裝置，但加入同一個 World。情侶雙裝置是其中一個主要使用情境。
@@ -1852,7 +1868,7 @@ Device B → World X
 
 而是：
 
-> **Worldpane 是一個持續存在於 Backend 的多人微型生活世界；一台或多台實體裝置，是觀看同一個世界的不同窗口。**
+> **WorldPane 是一個持續存在於 Backend 的多人微型生活世界；一台或多台實體裝置，是觀看同一個世界的不同窗口。**
 
 它不是以「一對角色」或「一對情侶」為架構前提。
 
@@ -1872,8 +1888,8 @@ Local Assets = 每個窗口自己的視覺呈現
 
 ```text
 中文：窗間
-英文：Worldpane
-Repository：worldpane
+英文：WorldPane
+Repository：WorldPane
 Firmware：worldpane-firmware
 Backend：worldpane-server
 Simulation Core：worldpane-core
