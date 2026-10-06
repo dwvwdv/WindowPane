@@ -826,8 +826,12 @@ function renderDetail() {
         current = await api(`/worlds/${w.id}/characters/${cid}`, { method: "DELETE" });
         toast("已封存");
       } else {
+        // Only what changed: an untouched field (e.g. an out-of-range sort order) is not resent.
         const body = {};
-        tr.querySelectorAll("[data-f]").forEach((el) => { body[el.dataset.f] = el.type === "number" ? Number(el.value) : el.value.trim(); });
+        tr.querySelectorAll("[data-f]").forEach((el) => {
+          if (el.value.trim() !== el.defaultValue.trim()) body[el.dataset.f] = el.type === "number" ? Number(el.value) : el.value.trim();
+        });
+        if (!Object.keys(body).length) { toast("沒有變更"); return; }
         current = await api(`/worlds/${w.id}/characters/${cid}`, { method: "PATCH", body });
         toast("已儲存角色");
       }

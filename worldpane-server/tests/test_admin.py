@@ -136,6 +136,10 @@ def test_rename_and_tune_shared_events(client):
      "overrides.date.context_overrides.holiday.wieght: unknown field"),
     ({"overrides": {"date": {"context_overrides": {"holiday": {"context_overrides": {}}}}}},
      "holiday.context_overrides: unknown field"),
+    ({"overrides": {"date": {"relationship_required": []}}}, "overrides.date.relationship_required"),
+    ({"overrides": {"date": {"relationship_required": "spouse"}}}, "overrides.date.relationship_required"),
+    ({"overrides": {"date": {"context_overrides": {"holiday": {"relationship_required": {}}}}}},
+     "holiday.relationship_required"),
 ])
 def test_invalid_shared_config_is_a_422_and_not_stored(client, cfg, fragment):
     before = client.get(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN).json()["shared_event_config"]
@@ -148,7 +152,7 @@ def test_invalid_shared_config_is_a_422_and_not_stored(client, cfg, fragment):
 
 
 def test_valid_nested_overrides_are_accepted(client):
-    cfg = {"overrides": {"date": {"weight": 5, "allowed_time": [["19:00", "22:00"]],
+    cfg = {"overrides": {"date": {"weight": 5, "allowed_time": [["19:00", "22:00"]], "relationship_required": "friend",
                                   "context_overrides": {"holiday": {"weight": 40, "enabled": True}}}}}
     r = client.patch(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN, json={"shared_event_config": cfg})
     assert r.status_code == 200, r.text
@@ -243,6 +247,42 @@ def test_failed_relationship_insert_leaves_no_character(client, repo, monkeypatc
             "display_name": "小橘", "appearance": "xiaoju", "profile_key": "official.freelancer.v1"})
     names = [c.display_name for c in repo.list_characters(DEMO_WORLD_ID, include_archived=True)]
     assert names == ["小白", "小雞毛"]
+
+
+def test_concurrent_additions_relate_to_each_other(client, repo):
+    for _ in range(5):
+        world = _create(client)["world"]
+        originals = {c["id"] for c in world["characters"]}
+        barrier = threading.Barrier(2)
+
+        def add(name: str) -> None:
+            barrier.wait()
+            r = client.post(f"{A}/worlds/{world['id']}/characters", headers=ADMIN, json={
+                "display_name": name, "appearance": "amao", "profile_key": "official.freelancer.v1"})
+            assert r.status_code == 201, r.text
+
+        threads = [threading.Thread(target=add, args=(n,)) for n in ("甲", "乙")]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        chars = repo.list_characters(world["id"])
+        new = [c.id for c in chars if c.id not in originals]
+        pairs = {frozenset((r.character_a_id, r.character_b_id)) for r in repo.list_relationships(world["id"])}
+        assert frozenset(new) in pairs
+        assert len({c.sort_order for c in chars}) == len(chars)
+
+
+def test_new_character_order_stays_within_patch_bounds(client):
+    r = client.patch(f"{A}/worlds/{DEMO_WORLD_ID}/characters/{DEMO_CHARACTER_IDS[1]}", headers=ADMIN,
+                     json={"sort_order": 1000})
+    assert r.status_code == 200
+    new = client.post(f"{A}/worlds/{DEMO_WORLD_ID}/characters", headers=ADMIN, json={
+        "display_name": "小橘", "appearance": "xiaoju", "profile_key": "official.freelancer.v1"}).json()["characters"][-1]
+    assert new["sort_order"] == 1000
+    r = client.patch(f"{A}/worlds/{DEMO_WORLD_ID}/characters/{new['id']}", headers=ADMIN,
+                     json={"display_name": "小橘子", "sort_order": new["sort_order"]})
+    assert r.status_code == 200
 
 
 def test_concurrent_archives_keep_one_active_character(client, repo, clock):

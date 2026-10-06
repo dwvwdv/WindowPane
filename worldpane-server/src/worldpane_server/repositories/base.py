@@ -85,10 +85,12 @@ class Repository(Protocol):
         ...
 
     # --- characters / relationships ------------------------------------------------------
-    def add_character(self, character: Character,
-                      relationships: Sequence[CharacterRelationship] = ()) -> None:
-        """Insert ``character`` and its ``relationships`` all-or-nothing, so no daily plan can be
-        generated from a World where the character exists but its relationships do not yet."""
+    def add_character(self, character: Character, *, relationship_type: str | None = None) -> None:
+        """Append ``character`` to its World in one transaction, under a World-level lock:
+        its ``sort_order`` becomes one after the World's last character (capped at
+        ``SORT_ORDER_MAX``) and, with ``relationship_type``, it gets that relationship with every
+        active character. Deriving both under the lock means concurrent additions also relate
+        to each other, and no daily plan can see the character without its relationships."""
         ...
 
     def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import threading
+import uuid
 from collections.abc import Sequence
 from datetime import date, datetime
 
@@ -14,6 +15,7 @@ from ..domain import (
     DeviceInput,
     Event,
     PairingCode,
+    SORT_ORDER_MAX,
     World,
     WorldSummary,
 )
@@ -114,14 +116,21 @@ class InMemoryRepository:
             return w.revision
 
     # characters
-    def add_character(self, character: Character,
-                      relationships: Sequence[CharacterRelationship] = ()) -> None:
+    def add_character(self, character: Character, *, relationship_type: str | None = None) -> None:
         with self._lock:
             if character.world_id not in self._worlds:
                 raise KeyError(character.world_id)
-            self._characters[character.world_id].append(copy.deepcopy(character))
-            self._relationships[character.world_id].extend(copy.deepcopy(r) for r in relationships)
-            self._worlds[character.world_id].revision += 1  # like characters_bump_revision
+            existing = self._characters[character.world_id]
+            c = copy.deepcopy(character)
+            c.sort_order = min(max((x.sort_order for x in existing), default=-1) + 1, SORT_ORDER_MAX)
+            if relationship_type:
+                self._relationships[c.world_id].extend(
+                    CharacterRelationship(id=str(uuid.uuid4()), world_id=c.world_id, character_a_id=x.id,
+                                          character_b_id=c.id, relationship_type=relationship_type)
+                    for x in existing if x.archived_at is None
+                )
+            existing.append(c)
+            self._worlds[c.world_id].revision += 1  # like characters_bump_revision
 
     def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         with self._lock:

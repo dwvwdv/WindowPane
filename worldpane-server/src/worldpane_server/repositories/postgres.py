@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any
 
@@ -30,6 +31,7 @@ from ..domain import (
     DeviceInput,
     Event,
     PairingCode,
+    SORT_ORDER_MAX,
     World,
     WorldSummary,
 )
@@ -276,12 +278,31 @@ class PostgresRepository:
                 (profile.id, def_id, Jsonb(dict(entry.overrides)), entry.enabled),
             )
 
-    def add_character(self, character: Character,
-                      relationships: Sequence[CharacterRelationship] = ()) -> None:
+    def add_character(self, character: Character, *, relationship_type: str | None = None) -> None:
         with self._pool.connection() as conn, conn.transaction():
-            self._insert_character(conn, character)
-            for r in relationships:
-                self._insert_relationship(conn, r)
+            # Serialise additions (and archives) within one World, so what is derived below
+            # already includes characters added by a concurrent request.
+            locked = conn.execute(
+                "select 1 from worldpane.worlds where id = %s for update", (character.world_id,)
+            ).fetchone()
+            if locked is None:
+                raise KeyError(character.world_id)
+            last = conn.execute(
+                "select max(sort_order) as m from worldpane.characters where world_id = %s",
+                (character.world_id,),
+            ).fetchone()["m"]
+            c = replace(character, sort_order=min((last if last is not None else -1) + 1, SORT_ORDER_MAX))
+            active = conn.execute(
+                """select id from worldpane.characters
+                    where world_id = %s and archived_at is null order by sort_order, id""",
+                (c.world_id,),
+            ).fetchall() if relationship_type else []
+            self._insert_character(conn, c)
+            for row in active:
+                self._insert_relationship(conn, CharacterRelationship(
+                    id=str(uuid.uuid4()), world_id=c.world_id, character_a_id=str(row["id"]),
+                    character_b_id=c.id, relationship_type=relationship_type,
+                ))
 
     def _insert_character(self, conn, character: Character) -> None:
         self._ensure_profile(conn, character.profile, character.world_id)

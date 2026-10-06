@@ -12,7 +12,7 @@ from worldpane_core.catalog import CONTEXTS, build_shared_event_config, material
 from worldpane_core.profiles import OFFICIAL_PROFILES
 
 from . import schemas
-from .domain import Character, CharacterRelationship, World
+from .domain import RELATIONSHIP_TYPES, Character, World
 from .security import new_id
 from .seed import build_world_with_defaults, official_profile
 from .services import ServiceError, WorldService
@@ -20,6 +20,7 @@ from .services import ServiceError, WorldService
 # Top-level keys of worlds.shared_event_config the generator reads (worldpane-core).
 SHARED_CONFIG_KEYS = {"attempts", "trigger_probability", "slot_step_min", "max_slot_tries", "overrides"}
 MONITOR_LIMIT = 48
+RELATIONSHIP_REQUIREMENTS = {"any", *RELATIONSHIP_TYPES}
 
 
 def _number(v: object) -> float | None:
@@ -36,6 +37,11 @@ def _override_problems(where: str, ov: object, fields: set[str], nested: bool = 
     problems = [f"{where}.{k}: unknown field" for k in sorted(set(ov) - allowed)]
     if "enabled" in ov and not isinstance(ov["enabled"], bool):
         problems.append(f"{where}.enabled must be true or false")
+    # Core matches it against a set of relationship types: anything unhashable would crash plans.
+    required = ov.get("relationship_required")
+    if required is not None and (not isinstance(required, str) or required not in RELATIONSHIP_REQUIREMENTS):
+        problems.append(f"{where}.relationship_required must be null, \"any\" or one of "
+                        f"{', '.join(RELATIONSHIP_TYPES)}")
     contexts = ov.get("context_overrides") if nested else None
     if isinstance(contexts, dict):
         for ctx, ctx_ov in contexts.items():
@@ -182,20 +188,14 @@ class AdminService:
         raise ServiceError(404, "character_not_found", "Character not found in this World")
 
     def add_character(self, world_id: str, body: schemas.AdminCharacterIn) -> schemas.AdminWorld:
-        """New characters join plans generated from now on; a day already planned stays as is."""
+        """New characters join plans generated from now on; a day already planned stays as is.
+        The repository places it last and relates it ("friend") to every active character."""
         world = self.service._world(world_id)
-        existing = self.repo.list_characters(world.id, include_archived=True)
         character = Character(
             id=new_id(), world_id=world.id, appearance_key=body.appearance,
             display_name=body.display_name, profile=self._profile(body.profile_key),
-            sort_order=max((c.sort_order for c in existing), default=-1) + 1,
         )
-        relationships = [
-            CharacterRelationship(id=new_id(), world_id=world.id, character_a_id=other.id,
-                                  character_b_id=character.id, relationship_type="friend")
-            for other in existing if other.archived_at is None
-        ]
-        self.repo.add_character(character, relationships)
+        self.repo.add_character(character, relationship_type="friend")
         return self.world(world.id)
 
     def update_character(self, world_id: str, character_id: str,

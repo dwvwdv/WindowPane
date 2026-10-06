@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .domain import SORT_ORDER_MAX, SORT_ORDER_MIN
+
 
 class ErrorDetail(BaseModel):
     code: str
@@ -181,7 +183,7 @@ class AdminCharacterIn(BaseModel):
 class AdminCharacterPatch(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=50)
     appearance: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
-    sort_order: int | None = Field(default=None, ge=-1000, le=1000)
+    sort_order: int | None = Field(default=None, ge=SORT_ORDER_MIN, le=SORT_ORDER_MAX)
 
     _strip_name = field_validator("display_name", mode="before")(_strip)
 
