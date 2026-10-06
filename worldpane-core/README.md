@@ -67,7 +67,7 @@ states = current_state(events, now, [c.id for c in characters])
 - 抽籤順序會影響 RNG，所以一律依 `(sort_order, key)` 排序，確保同樣的 DB 資料得到同樣的結果。
 
 實際數值存在 DB（`supabase/migrations/20261005130000_event_catalog.sql`）。`defaults.py` 只是官方預設與
-seed 來源：`python scripts/gen_seed_sql.py > ../supabase/seed.sql`（`--check` 檢查是否過期）。
+seed 來源：`python scripts/gen_seed_sql.py > ../supabase/seed.sql`（`python scripts/gen_seed_sql.py --check ../supabase/seed.sql` 檢查是否過期）。
 `tests/test_catalog.py` 驗證「DB 組裝出的設定」與 inline 預設產生完全相同的 Timeline，並示範只加資料就能新增個人事件與 3..N 人共同事件。
 
 ## 生成流程（§15）

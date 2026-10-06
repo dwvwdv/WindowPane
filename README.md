@@ -30,7 +30,7 @@ docker compose up -d --build    # 先把 supabase/migrations 套到 Supabase 專
 不用 Docker、只跑模擬：
 
 ```bash
-cd worldpane-core && python3 -m worldpane_core timeline --date 2026-10-05
+cd worldpane-core && PYTHONPATH=src python3 -m worldpane_core timeline --date 2026-10-05
 ```
 
 ## 後端負責什麼
@@ -50,7 +50,7 @@ device registration、World pairing、revision / ETag），以及 Docker 部署�
 
 | 項目 | 說明 |
 |---|---|
-| Supabase 尚未套用 schema | 遠端專案還沒有 `worldpane` schema；需 `supabase db push`（或用 psql 依序套用兩個 migration） |
+| 部署前套用 schema | 遠端 Supabase 專案需先 `supabase db push`（或用 psql 依序套用兩個 migration）；截至 2026-10-05 尚未套用 |
 | §34 TBD 數值 | 跳餐機率、請假機率、各事件 weight / duration / cooldown 目前都是佔位值，待定案後直接改 DB |
 | 國定假日 | 只把週末當假日；core 有 `World.holiday_dates`，但 DB / server 還沒有假日行事曆 |
 | 夜間睡覺 | 沒有睡覺事件，最後一個事件結束後到隔天早上都是 idle |
@@ -63,7 +63,7 @@ device registration、World pairing、revision / ETag），以及 Docker 部署�
 ## 測試
 
 ```bash
-cd worldpane-core && python3 -m pytest
-cd worldpane-server && python3 -m pip install -e ../worldpane-core -e ".[dev]" && python3 -m pytest
+(cd worldpane-core && python3 -m pytest)
+(cd worldpane-server && python3 -m pip install -e ../worldpane-core -e ".[dev]" && python3 -m pytest)
 # Postgres 測試：WORLDPANE_TEST_DATABASE_URL=postgresql://... python3 -m pytest（必須是可丟棄的 DB）
 ```
