@@ -136,6 +136,16 @@ def test_rename_and_tune_shared_events(client):
      "overrides.date.context_overrides.holiday.wieght: unknown field"),
     ({"overrides": {"date": {"context_overrides": {"holiday": {"context_overrides": {}}}}}},
      "holiday.context_overrides: unknown field"),
+    ({"overrides": {"date": {"allowed_context": ["weekend"]}}}, "overrides.date.allowed_context: unknown context weekend"),
+    ({"overrides": {"date": {"min_duration": "90"}}}, "overrides.date.min_duration must be an integer"),
+    ({"overrides": {"date": {"max_per_day": 1.7}}}, "overrides.date.max_per_day must be an integer"),
+    ({"overrides": {"date": {"weight": True}}}, "overrides.date.weight must be a number"),
+    ({"overrides": {"date": {"weight": "5"}}}, "overrides.date.weight must be a number"),
+    ({"overrides": {"date": {"label": {"x": 1}}}}, "overrides.date.label must be a non-empty string"),
+    ({"overrides": {"date": {"context_overrides": {"holiday": {"cooldown_min": "10"}}}}},
+     "holiday.cooldown_min must be an integer"),
+    ({"overrides": {"date": {"context_overrides": {"leave": {"allowed_context": ["holiday", "rainy"]}}}}},
+     "leave.allowed_context: unknown context rainy"),
     ({"overrides": {"date": {"relationship_required": []}}}, "overrides.date.relationship_required"),
     ({"overrides": {"date": {"relationship_required": "spouse"}}}, "overrides.date.relationship_required"),
     ({"overrides": {"date": {"context_overrides": {"holiday": {"relationship_required": {}}}}}},
@@ -152,7 +162,9 @@ def test_invalid_shared_config_is_a_422_and_not_stored(client, cfg, fragment):
 
 
 def test_valid_nested_overrides_are_accepted(client):
-    cfg = {"overrides": {"date": {"weight": 5, "allowed_time": [["19:00", "22:00"]], "relationship_required": "friend",
+    cfg = {"overrides": {"date": {"weight": 5.5, "max_participants": None, "label": "約會囉", "min_duration": 60,
+                                  "allowed_time": [["19:00", "22:00"]], "relationship_required": "friend",
+                                  "allowed_context": ["weekday", "holiday", "leave"],
                                   "context_overrides": {"holiday": {"weight": 40, "enabled": True}}}}}
     r = client.patch(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN, json={"shared_event_config": cfg})
     assert r.status_code == 200, r.text

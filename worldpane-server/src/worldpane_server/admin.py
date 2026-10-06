@@ -6,6 +6,8 @@ rewritten, and every change only affects what is generated (or displayed) from n
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from zoneinfo import ZoneInfo
 
 from worldpane_core.catalog import CONTEXTS, build_shared_event_config, materialize
@@ -23,6 +25,24 @@ MONITOR_LIMIT = 48
 RELATIONSHIP_REQUIREMENTS = {"any", *RELATIONSHIP_TYPES}
 
 
+def _is_int(v: object) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+# JSON types of shared-event fields. Core coerces with int()/float(), so "90", 1.7 or true would
+# be accepted and silently mean something else; values must have exactly these types.
+FIELD_TYPES: dict[str, tuple[Callable[[object], bool], str]] = {
+    "min_duration": (_is_int, "an integer"),
+    "max_duration": (_is_int, "an integer"),
+    "cooldown_min": (_is_int, "an integer"),
+    "max_per_day": (_is_int, "an integer"),
+    "min_participants": (_is_int, "an integer"),
+    "max_participants": (lambda v: v is None or _is_int(v), "an integer or null"),
+    "weight": (lambda v: _is_int(v) or isinstance(v, float), "a number"),
+    "label": (lambda v: isinstance(v, str) and 0 < len(v.strip()) <= 100, "a non-empty string"),
+}
+
+
 def _number(v: object) -> float | None:
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
@@ -37,6 +57,17 @@ def _override_problems(where: str, ov: object, fields: set[str], nested: bool = 
     problems = [f"{where}.{k}: unknown field" for k in sorted(set(ov) - allowed)]
     if "enabled" in ov and not isinstance(ov["enabled"], bool):
         problems.append(f"{where}.enabled must be true or false")
+    for name, (ok, expected) in FIELD_TYPES.items():
+        if name in ov and not ok(ov[name]):
+            problems.append(f"{where}.{name} must be {expected}")
+    # Core only checks for a list of strings; an unknown context ("weekend") never matches, which
+    # would silently switch the event off everywhere.
+    allowed_context = ov.get("allowed_context")
+    if isinstance(allowed_context, list):
+        unknown = [c for c in allowed_context if isinstance(c, str) and c not in CONTEXTS]
+        if unknown:
+            problems.append(f"{where}.allowed_context: unknown context {', '.join(map(str, unknown))} "
+                            f"(one of {', '.join(CONTEXTS)})")
     # Core matches it against a set of relationship types: anything unhashable would crash plans.
     required = ov.get("relationship_required")
     if required is not None and (not isinstance(required, str) or required not in RELATIONSHIP_REQUIREMENTS):
