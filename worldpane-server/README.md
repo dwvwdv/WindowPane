@@ -24,13 +24,13 @@ curl http://127.0.0.1:8000/healthz   # {"status":"ok"}
 
 server 以 `WORLDPANE_ENV=prod`、非 root 身分執行，啟動時會自動補上官方事件目錄和 Profile 模板。Pairing code 的 HMAC key 若未設定，會在第一次啟動時產生，存在 `server-data` volume，重啟後沿用。
 
-沒有 Supabase（本機或離線測試）時，可以加上 `--profile local-db`，順便起一個 Postgres 18。第一次建立 volume 時，它會自動建立 Supabase 的 `service_role` 等角色，並套用同一份 migrations 和 `seed.sql`：
+沒有 Supabase（本機或離線測試）時，可以加上 `--profile local-db`，順便起一個 Postgres 15（與 Supabase 專案相同版本）。第一次建立 volume 時，它會自動建立 Supabase 的 `service_role` 等角色，並套用同一份 migrations 和 `seed.sql`：
 
 ```bash
 docker compose --profile local-db up -d --build
 ```
 
-> 從 Postgres 16 版的 `local-db` 升級：舊的 `db-data` volume 不能直接給 18 用（major 版本不同，且 18 的 image 改掛在 `/var/lib/postgresql`）。要保留資料，先在舊版本執行 `docker compose exec db pg_dump -U postgres -d worldpane --clean --if-exists > worldpane.sql`，`docker compose --profile local-db down -v` 後用新版啟動，再 `docker compose exec -T db psql -U postgres -d worldpane < worldpane.sql`（`--clean` 會先刪掉新 volume 自動建立的物件再匯入）。只是測試資料的話，直接 `down -v` 重建即可。
+> 從 Postgres 16 版的 `local-db` 換過來：舊的 `db-data` volume 是 16 的資料格式，15 無法直接讀取。要保留資料，先在舊版本執行 `docker compose exec db pg_dump -U postgres -d worldpane --clean --if-exists > worldpane.sql`，`docker compose --profile local-db down -v` 後用新版啟動，再 `docker compose exec -T db psql -U postgres -d worldpane < worldpane.sql`（`--clean` 會先刪掉新 volume 自動建立的物件再匯入）。只是測試資料的話，直接 `down -v` 重建即可。
 
 部署後用 `POST /api/v1/world` 建立 World，回應裡有第一台裝置的 token，以及給第二台裝置用的 pairing code（見下方 curl 範例）。Demo World 預設不發 code（`WORLDPANE_SEED_DEMO_WORLD=false`）。
 
