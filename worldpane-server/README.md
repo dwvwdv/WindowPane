@@ -13,7 +13,7 @@ WorldPane（窗間）Backend API 骨架：Display API、World History、Device P
 
 預設接 Supabase：
 
-1. 先把 `supabase/migrations` 套用到你的 Supabase 專案（例如 `supabase db push`）。
+1. 確認 `supabase/migrations` 已套用到 Supabase 專案（目前的共用專案已套用，作法見 `../supabase/README.md`）。
 2. 把根目錄的 `.env.example` 複製成 `.env`，在 `WORLDPANE_DATABASE_URL` 填 service-role 的 Postgres 連線字串（Project Settings → Database，pooler 可用）。
 3. 在 repo 根目錄執行：
 
@@ -56,6 +56,8 @@ WORLDPANE_PAIRING_CODE_SECRET=... uvicorn worldpane_server.main:app
 
 Swagger UI：<http://127.0.0.1:8000/docs>
 
+Dashboard：<http://127.0.0.1:8000/dashboard>（見下方「Dashboard」）。
+
 瀏覽器 Demo：<http://127.0.0.1:8000/demo>。它會用和 API 相同的模擬，回放示範 World 從今天起一週的生活，也可以切到「連線後端」模式：輸入配對碼或建立新 World，像真正的裝置一樣輪詢 `/world/state`。要產生不需要後端的單檔版本，執行 `python scripts/build_demo_html.py -o demo.html`。
 
 ### 設定（環境變數，前綴 `WORLDPANE_`，或 `.env`；參考 `.env.example`）
@@ -72,6 +74,9 @@ Swagger UI：<http://127.0.0.1:8000/docs>
 | `WORLDPANE_REPOSITORY` | `memory` | `memory` / `postgres` |
 | `WORLDPANE_DATABASE_URL` | 空 | `postgres` 時必填；service-role DSN（支援 Supabase pooler） |
 | `WORLDPANE_SIMULATION_PROVIDER` | `core` | worldpane-core |
+| `WORLDPANE_SUPABASE_URL` | 空 | Dashboard 用 Supabase Auth 登入：專案 URL（`https://<ref>.supabase.co`） |
+| `WORLDPANE_SUPABASE_ANON_KEY` | 空 | 同上，anon（publishable）key；本來就是給瀏覽器用的公開值。URL 與 key 要一起設 |
+| `WORLDPANE_ADMIN_TOKEN` | 空 | 選用：共用的 admin Bearer token（至少 16 字元），給腳本 / CI，或沒有 Supabase 時登入 Dashboard。兩種登入方式都沒設 = admin API 停用（503） |
 
 Repo 中不含任何 secret。
 
@@ -94,6 +99,56 @@ OpenAPI 文件：[`openapi.json`](./openapi.json)（給 ESP32 端用）。重新
 python3 scripts/export_openapi.py          # 寫入 openapi.json
 python3 scripts/export_openapi.py --check  # CI 用：過期時 exit 1（tests 也會檢查）
 ```
+
+## Dashboard
+
+`GET /dashboard` 是單頁管理介面，所有資料都來自 `/api/v1/admin`。
+
+### 登入（Supabase Auth，做法同 Lazyrhythm 的文章發佈後台）
+
+1. `.env` 設 `WORLDPANE_SUPABASE_URL` 與 `WORLDPANE_SUPABASE_ANON_KEY`（Supabase → Project Settings → API）。
+2. 在 Supabase → Authentication → Users 建立 email / 密碼帳號。
+3. 把帳號登錄成管理員（migration `20261006144203_dashboard_admins.sql` 建立的白名單表）：
+
+   ```sql
+   insert into worldpane.admins (user_id, display_name)
+   select id, '你的名字' from auth.users where email = 'you@example.com';
+   ```
+
+流程：瀏覽器直接向 Supabase Auth（GoTrue REST）用 email / 密碼登入，session 存在 localStorage，
+過期前 60 秒自動 refresh；呼叫 admin API 時帶 access token，後端用 `GET /auth/v1/user` 向 Supabase 確認身分
+（結果快取 60 秒），再檢查 `worldpane.admins`。登入成功但不在名單內 → 403 `not_admin`；
+Supabase 連不上 → 503 `auth_unavailable`。`worldpane.admins` 只有 service role 讀得到；在 Supabase 上
+`user_id` 是 `auth.users` 的外鍵（刪除帳號會一併移除），本機 Postgres 沒有 `auth` schema 時則只是 uuid 欄位。
+
+`WORLDPANE_ADMIN_TOKEN`（選用）是給腳本與 CI 的共用 token，也能在登入頁「改用管理 Token」登入；它只存在瀏覽器分頁的 sessionStorage。
+
+### 功能
+
+- **監視牆**：每 15 秒呼叫一次 `GET /admin/monitor`，同時顯示多個 World 的即時畫面（和裝置看到的 state 相同）；
+  可選要看哪些 World、1–4 欄或自動版面、單一 World 放大、全螢幕。時鐘依各 World 的時區每秒走動。
+- **World 管理**：新增 World（自訂 1..12 個角色與時區，回傳配對碼）、改名、新增 / 改名 / 換外觀 / 調順序 / 封存角色、
+  調共同事件設定（表單或直接編 JSON）、發配對碼、看裝置列表與任一天的時間軸。
+
+Admin API（不在 `openapi.json`，那份是給 ESP32 的裝置合約）：
+
+| Method | Path | 說明 |
+|---|---|---|
+| `GET` | `/admin/me` | 目前登入的身分（`supabase` 帳號或 `token`） |
+| `GET` | `/admin/profiles` | 可選的官方行為 Profile |
+| `GET` | `/admin/worlds` | 所有 World（角色數、裝置數、revision） |
+| `POST` | `/admin/worlds` | 建立 World（不建立裝置），回傳 World 與配對碼 |
+| `GET` / `PATCH` | `/admin/worlds/{id}` | World 詳情；改 `name`、`shared_event_config` |
+| `POST` | `/admin/worlds/{id}/characters` | 新增角色（和現有角色建立 `friend` 關係） |
+| `PATCH` / `DELETE` | `/admin/worlds/{id}/characters/{cid}` | 改名稱 / 外觀 / 順序；`DELETE` = 封存（保留歷史，不能封存最後一位） |
+| `POST` | `/admin/worlds/{id}/pairing-codes` | 發配對碼 |
+| `GET` | `/admin/worlds/{id}/history?date=` | 同 `/world/history` |
+| `GET` | `/admin/monitor?world_id=…` | 多個 World 的目前 state（不帶參數 = 全部，最多 48 個） |
+
+調整的規則和 DB 調參一樣：已持久化的 daily plan 不會改寫。新增角色從「還沒產生計畫的日子」開始有行程
+（今天的計畫已產生時，今天先顯示 idle）；`shared_event_config` 只影響之後產生的日子，
+不合法的值（未知欄位、未知事件 key、超出範圍的機率…）直接回 422，不會存進 DB。
+時區建立後不能改，因為每天的計畫是依 World 的當地日期存的。
 
 ## curl 範例
 
@@ -147,8 +202,12 @@ WORLDPANE_TEST_DATABASE_URL='postgresql://service_role:...@localhost:5432/wp_tes
 src/worldpane_server/
 ├─ main.py              create_app() 工廠、demo seed；uvicorn 入口 `app`
 ├─ config.py            Settings（pydantic-settings, WORLDPANE_*）
-├─ api/routes.py        HTTP endpoints
-├─ api/deps.py          Bearer device auth
+├─ api/routes.py        HTTP endpoints（裝置）
+├─ api/admin_routes.py  /api/v1/admin（Dashboard 用）
+├─ admin.py             AdminService：列出 / 建立 / 調整 World、監視牆
+├─ static/dashboard.html  /dashboard 單頁介面
+├─ api/deps.py          Bearer device auth / admin auth（Supabase session 或 admin token）
+├─ supabase_auth.py     向 Supabase Auth 驗證 access token（含短期快取）
 ├─ services.py          WorldService：編排 repo + simulation，ETag/revision、pairing
 ├─ schemas.py           API 合約（pydantic）
 ├─ domain.py            World / Character / Event / Device / PairingCode …（§28）
@@ -215,4 +274,3 @@ src/worldpane_server/
 - 尚未提供 token 撤銷、裝置解綁、Device Preference API。
 - 假日只有週末；國定假日行事曆（core 的 `World.holiday_dates`）尚未存進 DB。
 - 沒有睡覺事件，夜間顯示 idle。
-- 沒有 CI，測試需在本機執行。

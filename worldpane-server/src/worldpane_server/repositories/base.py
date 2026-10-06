@@ -25,6 +25,7 @@ from ..domain import (
     Event,
     PairingCode,
     World,
+    WorldSummary,
 )
 
 
@@ -63,6 +64,15 @@ class Repository(Protocol):
 
     def get_world(self, world_id: str) -> World | None: ...
 
+    def list_world_summaries(self) -> list[WorldSummary]:
+        """Every World with its active character and device counts, oldest first (dashboard)."""
+        ...
+
+    def update_world(self, world_id: str, *, name: str | None = None,
+                     shared_event_config: dict | None = None) -> None:
+        """Change the given fields (``None`` = keep). Only affects plans generated afterwards."""
+        ...
+
     def bump_world_revision(self, world_id: str) -> int:
         """Atomically increment and return ``worlds.revision``."""
         ...
@@ -75,13 +85,33 @@ class Repository(Protocol):
         ...
 
     # --- characters / relationships ------------------------------------------------------
-    def add_character(self, character: Character) -> None: ...
+    def add_character(self, character: Character, *, relationship_type: str | None = None) -> None:
+        """Append ``character`` to its World in one transaction, under a World-level lock:
+        its ``sort_order`` becomes one after the World's last character (when that would pass
+        ``SORT_ORDER_MAX``, the World's characters are first renumbered 0..n-1 in their current
+        order) and, with ``relationship_type``, it gets that relationship with every
+        active character. Deriving both under the lock means concurrent additions also relate
+        to each other, and no daily plan can see the character without its relationships."""
+        ...
 
     def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         """Characters of a World (1..N), in stable display order.
 
         Archived (soft-deleted) characters are excluded unless ``include_archived``: they no
         longer get new plans, but their history must stay readable."""
+        ...
+
+    def update_character(self, character_id: str, *, display_name: str | None = None,
+                         appearance_key: str | None = None, sort_order: int | None = None) -> None:
+        """Change the given fields of a character (``None`` = keep)."""
+        ...
+
+    def archive_character(self, character_id: str, at: datetime, *, keep_one_active: bool = False) -> bool:
+        """Soft delete: no plans after ``at``'s date, history stays readable (spec §17).
+
+        With ``keep_one_active``, refuse (return False, change nothing) when this is the World's
+        last active character. The check and the update are atomic: two concurrent archives of
+        the last two characters cannot both succeed. Archiving an archived character is a no-op."""
         ...
 
     def add_relationship(self, relationship: CharacterRelationship) -> None: ...
@@ -124,3 +154,8 @@ class Repository(Protocol):
 
     # --- device input ------------------------------------------------------------------
     def add_device_input(self, item: DeviceInput) -> None: ...
+
+    # --- dashboard admins ----------------------------------------------------------------
+    def get_admin_name(self, user_id: str) -> str | None:
+        """Display name if this Supabase Auth user is listed in ``worldpane.admins``, else None."""
+        ...

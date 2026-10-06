@@ -16,6 +16,12 @@ from typing import Any
 from worldpane_core.catalog import EventDefinition, PoolEntry
 
 
+# Bounds for characters.sort_order set from the dashboard (the DB column itself is unbounded).
+SORT_ORDER_MIN, SORT_ORDER_MAX = -1000, 1000
+# worldpane.character_relationships.relationship_type values (migration check constraint).
+RELATIONSHIP_TYPES = ("couple", "friend", "roommate", "family", "sibling", "classmate", "colleague", "other")
+
+
 @dataclass
 class World:
     id: str
@@ -134,6 +140,20 @@ class PairingCode:
 
     def is_exhausted(self) -> bool:
         return self.used_count >= self.max_uses
+
+
+@dataclass
+class WorldSummary:
+    """One row of the dashboard's World list (counts exclude archived characters)."""
+
+    id: str
+    name: str
+    timezone: str
+    simulation_start_date: date
+    created_at: datetime
+    revision: int
+    character_count: int
+    device_count: int
 
 
 @dataclass

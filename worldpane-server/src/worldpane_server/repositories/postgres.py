@@ -11,7 +11,9 @@ Persisted plans are immutable history (spec §15, §17).
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any
 
@@ -29,7 +31,9 @@ from ..domain import (
     DeviceInput,
     Event,
     PairingCode,
+    SORT_ORDER_MAX,
     World,
+    WorldSummary,
 )
 from .base import PairingCodeRejected
 
@@ -173,6 +177,41 @@ class PostgresRepository:
             shared_event_definitions=[_definition(d) for d in defs],
         )
 
+    def list_world_summaries(self) -> list[WorldSummary]:
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                """select w.id, w.name, w.timezone, w.simulation_start_date, w.created_at, r.revision,
+                          (select count(*) from worldpane.characters c
+                            where c.world_id = w.id and c.archived_at is null) as character_count,
+                          (select count(*) from worldpane.devices d
+                            where d.world_id = w.id and d.revoked_at is null) as device_count
+                     from worldpane.worlds w
+                     join worldpane.world_revisions r on r.world_id = w.id
+                    order by w.created_at, w.id"""
+            ).fetchall()
+        return [
+            WorldSummary(
+                id=str(r["id"]), name=r["name"], timezone=r["timezone"],
+                simulation_start_date=r["simulation_start_date"], created_at=r["created_at"],
+                revision=r["revision"], character_count=r["character_count"],
+                device_count=r["device_count"],
+            )
+            for r in rows
+        ]
+
+    def update_world(self, world_id: str, *, name: str | None = None,
+                     shared_event_config: dict | None = None) -> None:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                """update worldpane.worlds
+                      set name = coalesce(%s, name),
+                          shared_event_config = coalesce(%s, shared_event_config)
+                    where id = %s returning id""",
+                (name, Jsonb(shared_event_config) if shared_event_config is not None else None, world_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(world_id)
+
     def bump_world_revision(self, world_id: str) -> int:
         with self._pool.connection() as conn:
             row = conn.execute(
@@ -239,9 +278,44 @@ class PostgresRepository:
                 (profile.id, def_id, Jsonb(dict(entry.overrides)), entry.enabled),
             )
 
-    def add_character(self, character: Character) -> None:
+    def add_character(self, character: Character, *, relationship_type: str | None = None) -> None:
         with self._pool.connection() as conn, conn.transaction():
-            self._insert_character(conn, character)
+            # Serialise additions (and archives) within one World, so what is derived below
+            # already includes characters added by a concurrent request. NO KEY UPDATE still
+            # conflicts with itself but not with the KEY SHARE locks of FK inserts, so devices
+            # materialising a plan for this World are not blocked meanwhile.
+            locked = conn.execute(
+                "select 1 from worldpane.worlds where id = %s for no key update", (character.world_id,)
+            ).fetchone()
+            if locked is None:
+                raise KeyError(character.world_id)
+            last = conn.execute(
+                "select max(sort_order) as m from worldpane.characters where world_id = %s",
+                (character.world_id,),
+            ).fetchone()["m"]
+            last = -1 if last is None else last
+            if last >= SORT_ORDER_MAX:
+                # No room after the last one: renumber 0..n-1 in the current order, then append.
+                ids = [r["id"] for r in conn.execute(
+                    "select id from worldpane.characters where world_id = %s order by sort_order, id",
+                    (character.world_id,),
+                ).fetchall()]
+                with conn.cursor() as cur:
+                    cur.executemany("update worldpane.characters set sort_order = %s where id = %s",
+                                    list(enumerate(ids)))
+                last = len(ids) - 1
+            c = replace(character, sort_order=min(last + 1, SORT_ORDER_MAX))
+            active = conn.execute(
+                """select id from worldpane.characters
+                    where world_id = %s and archived_at is null order by sort_order, id""",
+                (c.world_id,),
+            ).fetchall() if relationship_type else []
+            self._insert_character(conn, c)
+            for row in active:
+                self._insert_relationship(conn, CharacterRelationship(
+                    id=str(uuid.uuid4()), world_id=c.world_id, character_a_id=str(row["id"]),
+                    character_b_id=c.id, relationship_type=relationship_type,
+                ))
 
     def _insert_character(self, conn, character: Character) -> None:
         self._ensure_profile(conn, character.profile, character.world_id)
@@ -315,6 +389,47 @@ class PostgresRepository:
             )
             for r in rows
         ]
+
+    def update_character(self, character_id: str, *, display_name: str | None = None,
+                         appearance_key: str | None = None, sort_order: int | None = None) -> None:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                """update worldpane.characters
+                      set display_name = coalesce(%s, display_name),
+                          appearance_key = coalesce(%s, appearance_key),
+                          sort_order = coalesce(%s, sort_order)
+                    where id = %s returning id""",
+                (display_name, appearance_key, sort_order, character_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(character_id)
+
+    def archive_character(self, character_id: str, at: datetime, *, keep_one_active: bool = False) -> bool:
+        with self._pool.connection() as conn, conn.transaction():
+            row = conn.execute(
+                "select world_id, archived_at from worldpane.characters where id = %s", (character_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(character_id)
+            if row["archived_at"] is not None:
+                return True
+            # Serialise archives within one World: after this lock, the count below sees any
+            # archive committed meanwhile, so the last two characters cannot both go.
+            conn.execute("select 1 from worldpane.worlds where id = %s for no key update", (row["world_id"],))
+            if keep_one_active:
+                others = conn.execute(
+                    """select count(*) as n from worldpane.characters
+                        where world_id = %s and archived_at is null and id <> %s""",
+                    (row["world_id"], character_id),
+                ).fetchone()["n"]
+                if not others:
+                    return False
+            conn.execute(
+                """update worldpane.characters set archived_at = %s
+                    where id = %s and archived_at is null""",
+                (at, character_id),
+            )
+        return True
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
         with self._pool.connection() as conn:
@@ -543,6 +658,18 @@ class PostgresRepository:
                 (item.id, item.device_id, item.world_id or None, item.type, item.button,
                  Jsonb(item.payload), item.received_at),
             )
+
+    # --- dashboard admins ----------------------------------------------------------------
+    def get_admin_name(self, user_id: str) -> str | None:
+        try:
+            uuid.UUID(user_id)
+        except ValueError:
+            return None
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "select display_name from worldpane.admins where user_id = %s", (user_id,)
+            ).fetchone()
+        return row["display_name"] if row else None
 
     def list_device_inputs(self, world_id: str) -> list[DeviceInput]:
         """Not part of the Protocol; handy for tests/debugging."""

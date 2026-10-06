@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import threading
+import uuid
 from collections.abc import Sequence
 from datetime import date, datetime
 
@@ -14,7 +15,9 @@ from ..domain import (
     DeviceInput,
     Event,
     PairingCode,
+    SORT_ORDER_MAX,
     World,
+    WorldSummary,
 )
 from .base import PairingCodeRejected
 
@@ -31,6 +34,7 @@ class InMemoryRepository:
         self._codes: dict[str, PairingCode] = {}
         self._code_by_hash: dict[str, str] = {}
         self._inputs: list[DeviceInput] = []
+        self._admins: dict[str, str] = {}
 
     def install_official_content(self, definitions, profiles) -> None:
         """Nothing to install: in-memory characters carry their profiles directly."""
@@ -74,6 +78,29 @@ class InMemoryRepository:
             w = self._worlds.get(world_id)
             return copy.deepcopy(w) if w else None
 
+    def list_world_summaries(self) -> list[WorldSummary]:
+        with self._lock:
+            return [
+                WorldSummary(
+                    id=w.id, name=w.name, timezone=w.timezone,
+                    simulation_start_date=w.simulation_start_date, created_at=w.created_at,
+                    revision=w.revision,
+                    character_count=sum(c.archived_at is None for c in self._characters[w.id]),
+                    device_count=sum(d.world_id == w.id for d in self._devices.values()),
+                )
+                for w in sorted(self._worlds.values(), key=lambda w: (w.created_at, w.id))
+            ]
+
+    def update_world(self, world_id: str, *, name: str | None = None,
+                     shared_event_config: dict | None = None) -> None:
+        with self._lock:
+            w = self._worlds[world_id]
+            if name is not None:
+                w.name = name
+            if shared_event_config is not None:
+                w.shared_event_config = copy.deepcopy(shared_event_config)
+            w.revision += 1  # like the Postgres worlds_bump_revision trigger
+
     def bump_world_revision(self, world_id: str) -> int:
         with self._lock:
             w = self._worlds[world_id]
@@ -89,11 +116,27 @@ class InMemoryRepository:
             return w.revision
 
     # characters
-    def add_character(self, character: Character) -> None:
+    def add_character(self, character: Character, *, relationship_type: str | None = None) -> None:
         with self._lock:
             if character.world_id not in self._worlds:
                 raise KeyError(character.world_id)
-            self._characters[character.world_id].append(copy.deepcopy(character))
+            existing = self._characters[character.world_id]
+            c = copy.deepcopy(character)
+            last = max((x.sort_order for x in existing), default=-1)
+            if last >= SORT_ORDER_MAX:
+                # No room after the last one: renumber 0..n-1 in the current order, then append.
+                for i, x in enumerate(sorted(existing, key=lambda x: (x.sort_order, x.id))):
+                    x.sort_order = i
+                last = len(existing) - 1
+            c.sort_order = min(last + 1, SORT_ORDER_MAX)
+            if relationship_type:
+                self._relationships[c.world_id].extend(
+                    CharacterRelationship(id=str(uuid.uuid4()), world_id=c.world_id, character_a_id=x.id,
+                                          character_b_id=c.id, relationship_type=relationship_type)
+                    for x in existing if x.archived_at is None
+                )
+            existing.append(c)
+            self._worlds[c.world_id].revision += 1  # like characters_bump_revision
 
     def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         with self._lock:
@@ -102,6 +145,37 @@ class InMemoryRepository:
                 if include_archived or c.archived_at is None
             ]
             return [copy.deepcopy(c) for c in sorted(chars, key=lambda c: (c.sort_order, c.id))]
+
+    def _character(self, character_id: str) -> Character:
+        for chars in self._characters.values():
+            for c in chars:
+                if c.id == character_id:
+                    return c
+        raise KeyError(character_id)
+
+    def update_character(self, character_id: str, *, display_name: str | None = None,
+                         appearance_key: str | None = None, sort_order: int | None = None) -> None:
+        with self._lock:
+            c = self._character(character_id)
+            if display_name is not None:
+                c.display_name = display_name
+            if appearance_key is not None:
+                c.appearance_key = appearance_key
+            if sort_order is not None:
+                c.sort_order = sort_order
+            self._worlds[c.world_id].revision += 1
+
+    def archive_character(self, character_id: str, at: datetime, *, keep_one_active: bool = False) -> bool:
+        with self._lock:
+            c = self._character(character_id)
+            if c.archived_at is not None:
+                return True
+            others = [x for x in self._characters[c.world_id] if x.id != c.id and x.archived_at is None]
+            if keep_one_active and not others:
+                return False
+            c.archived_at = at
+            self._worlds[c.world_id].revision += 1
+            return True
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
         with self._lock:
@@ -180,13 +254,14 @@ class InMemoryRepository:
         with self._lock:
             self._inputs.append(copy.deepcopy(item))
 
-    def archive_character(self, character_id: str, at: datetime) -> None:
-        """Not part of the Protocol; soft delete for tests/debugging."""
+    def get_admin_name(self, user_id: str) -> str | None:
         with self._lock:
-            for chars in self._characters.values():
-                for c in chars:
-                    if c.id == character_id:
-                        c.archived_at = at
+            return self._admins.get(user_id)
+
+    def add_admin(self, user_id: str, display_name: str) -> None:
+        """Not part of the Protocol (Postgres admins are rows in worldpane.admins); for tests/dev."""
+        with self._lock:
+            self._admins[user_id] = display_name
 
     def list_device_inputs(self, world_id: str) -> list[DeviceInput]:
         """Not part of the Protocol; handy for tests/debugging."""
