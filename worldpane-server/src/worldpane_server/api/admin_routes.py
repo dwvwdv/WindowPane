@@ -12,10 +12,15 @@ from fastapi import APIRouter, Body, Depends, Query, status
 
 from .. import schemas
 from ..admin import AdminService
-from .deps import get_admin, require_admin
+from .deps import AdminPrincipal, get_admin, require_admin
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_admin)],
                    include_in_schema=False)
+
+
+@router.get("/me", response_model=schemas.AdminMe)
+def me(principal: AdminPrincipal = Depends(require_admin)):
+    return schemas.AdminMe(**vars(principal))
 
 
 @router.get("/profiles", response_model=list[schemas.AdminProfile])

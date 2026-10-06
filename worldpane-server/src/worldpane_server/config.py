@@ -37,7 +37,13 @@ class Settings(BaseSettings):
     # Postgres DSN (Supabase: the service-role connection string). Never commit a value.
     database_url: str = ""
 
-    # Bearer token for the admin API and the /dashboard page. Empty = admin API disabled.
+    # Dashboard sign-in with Supabase Auth: the project URL and its anon (publishable) key. Both
+    # are public values the browser needs anyway; accounts also need a row in worldpane.admins.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+
+    # Optional shared Bearer token for the admin API (scripts, CI, a dashboard without Supabase).
+    # The admin API is disabled when neither this nor Supabase Auth is configured.
     admin_token: str = ""
 
     @model_validator(mode="after")
@@ -52,6 +58,11 @@ class Settings(BaseSettings):
             raise ValueError("WORLDPANE_DEMO_PAIRING_CODE must be 6 digits")
         if self.admin_token and len(self.admin_token) < 16:
             raise ValueError("WORLDPANE_ADMIN_TOKEN must be at least 16 characters")
+        if bool(self.supabase_url) != bool(self.supabase_anon_key):
+            raise ValueError("Set both WORLDPANE_SUPABASE_URL and WORLDPANE_SUPABASE_ANON_KEY, or neither")
+        if self.supabase_url and not self.supabase_url.startswith(("https://", "http://")):
+            raise ValueError("WORLDPANE_SUPABASE_URL must be an http(s) URL")
+        self.supabase_url = self.supabase_url.rstrip("/")
         return self
 
 

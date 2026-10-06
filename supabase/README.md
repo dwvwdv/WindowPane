@@ -6,7 +6,8 @@ WorldPane（窗間）的資料庫結構。所有物件都放在獨立的 **`worl
 supabase/
 ├── migrations/
 │   ├── 20261005120000_init_worldpane.sql   # schema、table、index、trigger、function、RLS、權限
-│   └── 20261005130000_event_catalog.sql    # 事件目錄 event_definitions、profile_event_pools、device_inputs
+│   ├── 20261005130000_event_catalog.sql    # 事件目錄 event_definitions、profile_event_pools、device_inputs
+│   └── 20261006120000_dashboard_admins.sql # Dashboard 管理員白名單 worldpane.admins（Supabase Auth 帳號）
 ├── seed.sql                                 # 由 worldpane-core/scripts/gen_seed_sql.py 產生：官方事件目錄、官方 Profile、Demo World
 └── README.md
 ```
@@ -87,6 +88,7 @@ sql_paths = ["./seed.sql"]
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005120000_init_worldpane.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005130000_event_catalog.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261006120000_dashboard_admins.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql   # 選用：本機開發才需要
 ```
 

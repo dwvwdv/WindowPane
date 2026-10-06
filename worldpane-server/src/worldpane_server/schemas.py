@@ -158,6 +158,13 @@ def _strip(v: object) -> object:
     return v.strip() if isinstance(v, str) else v
 
 
+class AdminMe(BaseModel):
+    via: Literal["supabase", "token"]
+    user_id: str | None
+    email: str | None
+    display_name: str | None
+
+
 class AdminProfile(BaseModel):
     key: str
     name: str

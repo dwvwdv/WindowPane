@@ -11,6 +11,7 @@ Persisted plans are immutable history (spec §15, §17).
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any
@@ -623,6 +624,18 @@ class PostgresRepository:
                 (item.id, item.device_id, item.world_id or None, item.type, item.button,
                  Jsonb(item.payload), item.received_at),
             )
+
+    # --- dashboard admins ----------------------------------------------------------------
+    def get_admin_name(self, user_id: str) -> str | None:
+        try:
+            uuid.UUID(user_id)
+        except ValueError:
+            return None
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "select display_name from worldpane.admins where user_id = %s", (user_id,)
+            ).fetchone()
+        return row["display_name"] if row else None
 
     def list_device_inputs(self, world_id: str) -> list[DeviceInput]:
         """Not part of the Protocol; handy for tests/debugging."""

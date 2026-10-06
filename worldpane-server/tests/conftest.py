@@ -57,7 +57,8 @@ def _reset_postgres(repo, *, seed: bool = True) -> None:
     """Wipe all data; re-apply supabase/seed.sql unless ``seed=False`` (= migrations-only DB)."""
     with repo._pool.connection() as conn:
         conn.execute(
-            """delete from worldpane.device_inputs;
+            """delete from worldpane.admins;
+               delete from worldpane.device_inputs;
                delete from worldpane.pairing_codes;
                delete from worldpane.devices;
                delete from worldpane.worlds;

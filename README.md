@@ -26,7 +26,7 @@ docker compose up -d --build    # 先把 supabase/migrations 套到 Supabase 專
 
 - API 文件：<http://127.0.0.1:8000/docs>
 - 瀏覽器 Demo：<http://127.0.0.1:8000/demo>（離線回放一週，或連線後端模擬一台裝置）
-- Dashboard：<http://127.0.0.1:8000/dashboard>（需在 `.env` 設 `WORLDPANE_ADMIN_TOKEN`）：新增 / 調整 World，監視牆一次看多個 World 的畫面
+- Dashboard：<http://127.0.0.1:8000/dashboard>：用 Supabase Auth 帳號登入（設定見 [server README](./worldpane-server/README.md#dashboard)），新增 / 調整 World，監視牆一次看多個 World 的畫面
 
 用 CI 發布的 image、不在本機 build：`.env` 設 `WORLDPANE_IMAGE=ghcr.io/dwvwdv/worldpane-server:latest`，再 `docker compose pull && docker compose up -d`。
 
@@ -54,13 +54,13 @@ device registration、World pairing、revision / ETag），以及 Docker 部署�
 
 | 項目 | 說明 |
 |---|---|
-| 部署前套用 schema | 遠端 Supabase 專案需先 `supabase db push`（或用 psql 依序套用兩個 migration）；截至 2026-10-05 尚未套用 |
+| 部署前套用 schema | 遠端 Supabase 專案需先 `supabase db push`（或用 psql 依序套用 `supabase/migrations` 的所有 migration）；截至 2026-10-06 尚未套用 |
 | §34 TBD 數值 | 跳餐機率、請假機率、各事件 weight / duration / cooldown 目前都是佔位值，待定案後直接改 DB |
 | 國定假日 | 只把週末當假日；core 有 `World.holiday_dates`，但 DB / server 還沒有假日行事曆 |
 | 夜間睡覺 | 沒有睡覺事件，最後一個事件結束後到隔天早上都是 idle |
 | Device Preference API（§23） | 表已建立（`device_preferences`），但沒有 endpoint |
 | 安全 | `/device/pair`、`POST /world` 沒有 rate limit；沒有 token 撤銷 / 裝置解綁（Dashboard 也還不能解綁裝置）|
-| Dashboard 權限 | 只有一組共用的 `WORLDPANE_ADMIN_TOKEN`，沒有個別帳號；admin API 沒有 rate limit |
+| Dashboard 權限 | 登入用 Supabase Auth，`worldpane.admins` 裡的帳號全部是同等權限（沒有唯讀 / 分 World 授權）；admin API 沒有 rate limit |
 | Migration 自動部署 | CI 只發布 image；Supabase migration 仍需手動 `supabase db push` |
 | `POST /device/input` | 只記錄，不影響模擬 |
 | ESP32 firmware（Phase 3–5） | 尚未開始；API 合約在 [`worldpane-server/openapi.json`](./worldpane-server/openapi.json) |

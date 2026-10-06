@@ -32,6 +32,7 @@ class InMemoryRepository:
         self._codes: dict[str, PairingCode] = {}
         self._code_by_hash: dict[str, str] = {}
         self._inputs: list[DeviceInput] = []
+        self._admins: dict[str, str] = {}
 
     def install_official_content(self, definitions, profiles) -> None:
         """Nothing to install: in-memory characters carry their profiles directly."""
@@ -233,6 +234,15 @@ class InMemoryRepository:
     def add_device_input(self, item: DeviceInput) -> None:
         with self._lock:
             self._inputs.append(copy.deepcopy(item))
+
+    def get_admin_name(self, user_id: str) -> str | None:
+        with self._lock:
+            return self._admins.get(user_id)
+
+    def add_admin(self, user_id: str, display_name: str) -> None:
+        """Not part of the Protocol (Postgres admins are rows in worldpane.admins); for tests/dev."""
+        with self._lock:
+            self._admins[user_id] = display_name
 
     def list_device_inputs(self, world_id: str) -> list[DeviceInput]:
         """Not part of the Protocol; handy for tests/debugging."""

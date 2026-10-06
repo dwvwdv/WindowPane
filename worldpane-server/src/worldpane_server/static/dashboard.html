@@ -49,7 +49,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .btn.danger { color: var(--danger); }
 .btn.small { padding: 2px 8px; font-size: .8rem; }
 .btn:disabled { opacity: .5; cursor: default; }
-input[type="text"], input[type="number"], input[type="password"], input[type="date"], select, textarea {
+input[type="text"], input[type="email"], input[type="number"], input[type="password"], input[type="date"], select, textarea {
   font: inherit; font-size: .9rem; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--panel); color: var(--ink); min-width: 0; }
 textarea { font-family: var(--font-mono); font-size: .8rem; width: 100%; min-height: 180px; resize: vertical; }
@@ -62,7 +62,10 @@ label.lbl, .lbl { font-size: .82rem; color: var(--muted); }
 
 /* Login gate */
 .gate { max-width: 460px; margin: 10vh auto 0; }
-.gate input { flex: 1 1 220px; }
+.gate form { display: grid; gap: 10px; }
+.gate label { display: grid; gap: 3px; }
+.gate .row input { flex: 1 1 220px; }
+.whoami { font-size: .82rem; color: var(--muted); max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .err { color: var(--danger); }
 
 /* Monitor wall */
@@ -172,19 +175,29 @@ dialog form, dialog .body { padding: 16px; display: grid; gap: 12px; }
         <button id="tab-monitor" type="button" aria-pressed="true">監視牆</button>
         <button id="tab-manage" type="button" aria-pressed="false">World 管理</button>
       </div>
+      <span class="whoami" id="whoami"></span>
       <button class="btn" id="logout" type="button">登出</button>
     </div>
   </header>
 
   <!-- Login -->
   <section class="panel gate" id="gate">
-    <h2>輸入管理 Token</h2>
-    <form class="row" id="login">
-      <input id="token" type="password" autocomplete="current-password" placeholder="WORLDPANE_ADMIN_TOKEN" aria-label="管理 Token" required>
-      <button class="btn primary" type="submit">登入</button>
+    <h2>登入 Dashboard</h2>
+    <form id="login" hidden>
+      <label><span class="lbl">Email</span><input id="email" type="email" autocomplete="username" required></label>
+      <label><span class="lbl">密碼</span><input id="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit" id="login-submit">登入</button>
+      <p class="note">用 Supabase Auth 帳號登入；帳號還需要登錄在 <code>worldpane.admins</code> 才能使用 Dashboard。</p>
     </form>
-    <div class="status" id="gatestatus"></div>
-    <p class="note">Token 是伺服器的 <code>WORLDPANE_ADMIN_TOKEN</code>，只存在這個分頁（sessionStorage），關掉分頁就要重新輸入。</p>
+    <details id="token-login" hidden>
+      <summary>改用管理 Token</summary>
+      <form class="row" id="token-form" style="margin-top:8px">
+        <input id="token" type="password" autocomplete="off" placeholder="WORLDPANE_ADMIN_TOKEN" aria-label="管理 Token" required>
+        <button class="btn" type="submit">用 Token 登入</button>
+      </form>
+      <p class="note">Token 只存在這個分頁（sessionStorage），關掉分頁就要重新輸入。</p>
+    </details>
+    <div class="status" id="gatestatus" role="status"></div>
   </section>
 
   <!-- Monitor wall -->
@@ -266,6 +279,8 @@ dialog form, dialog .body { padding: 16px; display: grid; gap: 12px; }
 
 <script>
 const API = "/api/v1/admin";
+// Public sign-in settings embedded by the server (Supabase URL + anon key, token sign-in on/off).
+const CONFIG = /*__DASHBOARD_CONFIG__*/null || { supabase_url: "", supabase_anon_key: "", token_login: true };
 const POLL_MS = 15000;
 
 const SCENES = {
@@ -325,9 +340,83 @@ function todayIn(tz) {
   catch { return new Date().toISOString().slice(0, 10); }
 }
 
-/* ---------- API ---------- */
-let token = session.get("worldpane.admin.token");
+/* ---------- auth ---------- */
+// Supabase Auth (GoTrue REST), same flow as the Lazyrhythm author desk: password sign-in, the
+// session kept in localStorage and refreshed shortly before it expires. The server checks the
+// access token with Supabase and the account against worldpane.admins.
+// A shared WORLDPANE_ADMIN_TOKEN is the fallback; it lives in sessionStorage only.
+const SB_SESSION_KEY = "worldpane.dashboard.session";
+const TOKEN_KEY = "worldpane.admin.token";
+const REFRESH_MARGIN_S = 60;
+let auth = readAuth();   // { kind: "supabase", accessToken, refreshToken, expiresAt, email } | { kind: "token", token } | null
+let refreshing = null;
 
+function readAuth() {
+  const t = session.get(TOKEN_KEY);
+  if (t && CONFIG.token_login) return { kind: "token", token: t };
+  if (!CONFIG.supabase_url) return null;
+  try {
+    const s = JSON.parse(local.get(SB_SESSION_KEY));
+    return s && s.accessToken && s.refreshToken ? Object.assign({ kind: "supabase" }, s) : null;
+  } catch { return null; }
+}
+
+function storeSupabase(tok) {
+  auth = { kind: "supabase", accessToken: tok.access_token, refreshToken: tok.refresh_token,
+    expiresAt: tok.expires_at || Math.floor(Date.now() / 1000) + tok.expires_in, email: tok.user?.email || "" };
+  const { kind, ...saved } = auth;
+  local.set(SB_SESSION_KEY, JSON.stringify(saved));
+  return auth;
+}
+
+function clearAuth() {
+  auth = null;
+  local.set(SB_SESSION_KEY, null);
+  session.set(TOKEN_KEY, null);
+}
+
+async function gotrue(path, body, accessToken) {
+  const headers = { apikey: CONFIG.supabase_anon_key, "Content-Type": "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  return fetch(`${CONFIG.supabase_url}/auth/v1/${path}`, { method: "POST", headers, body: body ? JSON.stringify(body) : undefined });
+}
+
+async function signIn(email, password) {
+  const r = await gotrue("token?grant_type=password", { email, password });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(r.status === 400 ? "Email 或密碼錯誤。" : (body.error_description || body.msg || `登入失敗：HTTP ${r.status}`));
+  return storeSupabase(body);
+}
+
+async function refresh() {
+  try {
+    const r = await gotrue("token?grant_type=refresh_token", { refresh_token: auth.refreshToken });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return storeSupabase(await r.json());
+  } catch {
+    clearAuth();
+    return null;
+  }
+}
+
+// A valid bearer for the admin API, refreshing the Supabase session when it is about to expire.
+async function accessToken() {
+  if (!auth) return null;
+  if (auth.kind === "token") return auth.token;
+  if (auth.expiresAt - REFRESH_MARGIN_S > Date.now() / 1000) return auth.accessToken;
+  refreshing ??= refresh().finally(() => { refreshing = null; });
+  return (await refreshing)?.accessToken ?? null;
+}
+
+async function signOut() {
+  const prev = auth;
+  clearAuth();
+  if (prev?.kind === "supabase") {
+    try { await gotrue("logout", null, prev.accessToken); } catch { /* local session is gone either way */ }
+  }
+}
+
+/* ---------- API ---------- */
 class ApiError extends Error {
   constructor(status, body) {
     const d = body && body.detail;
@@ -340,12 +429,18 @@ class ApiError extends Error {
 }
 
 async function api(path, opts = {}) {
-  const headers = { Authorization: `Bearer ${token}` };
+  const bearer = await accessToken();
+  if (!bearer) { logout("登入已過期，請重新登入。"); throw new ApiError(401, null); }
+  const headers = { Authorization: `Bearer ${bearer}` };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   const r = await fetch(API + path, { method: opts.method || "GET", headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
   const body = r.status === 204 ? null : await r.json().catch(() => null);
-  if (r.status === 401) { logout("Token 無效或已更換，請重新登入。"); throw new ApiError(401, body); }
+  if (r.status === 401) { logout(auth?.kind === "token" ? "Token 無效或已更換，請重新登入。" : "登入已過期，請重新登入。"); throw new ApiError(401, body); }
+  if (r.status === 403 && body?.detail?.code === "not_admin") {
+    logout("這個帳號還不是 Dashboard 管理員：請把它加進 worldpane.admins。");
+    throw new ApiError(403, body);
+  }
   if (!r.ok) throw new ApiError(r.status, body);
   return body;
 }
@@ -367,28 +462,52 @@ function showGate(msg) {
   $("topbar").hidden = true;
   $("monitor").hidden = true;
   $("manage").hidden = true;
+  $("login").hidden = !CONFIG.supabase_url;
+  $("token-login").hidden = !CONFIG.token_login;
+  $("token-login").open = CONFIG.token_login && !CONFIG.supabase_url;
+  if (!CONFIG.supabase_url && !CONFIG.token_login) {
+    msg = msg || "伺服器沒有設定登入方式：請設定 WORLDPANE_SUPABASE_URL 與 WORLDPANE_SUPABASE_ANON_KEY（或 WORLDPANE_ADMIN_TOKEN）。";
+  }
   $("gatestatus").textContent = msg || "";
   $("gatestatus").classList.toggle("err", !!msg);
 }
 
 function logout(msg) {
-  token = null;
-  session.set("worldpane.admin.token", null);
+  signOut();
   stopPolling();
   showGate(msg);
 }
 
+async function enter(errText) {
+  try {
+    await start();
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) return;  // api() already sent us back to the gate
+    showGate(e.code === "admin_disabled" ? "伺服器沒有啟用管理功能。" : `${errText}${e.message}`);
+  }
+}
+
 $("login").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  token = $("token").value.trim();
+  $("login-submit").disabled = true;
+  $("gatestatus").textContent = "登入中…";
+  $("gatestatus").classList.remove("err");
   try {
-    await api("/worlds");
-    session.set("worldpane.admin.token", token);
-    $("token").value = "";
-    start();
+    await signIn($("email").value.trim(), $("password").value);
+    $("password").value = "";
+    await enter("登入後讀取失敗：");
   } catch (e) {
-    if (e.status !== 401) showGate(e.code === "admin_disabled" ? "伺服器沒有設定 WORLDPANE_ADMIN_TOKEN，管理功能未啟用。" : `連線失敗：${e.message}`);
+    showGate(e.message);
+  } finally {
+    $("login-submit").disabled = false;
   }
+});
+$("token-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  auth = { kind: "token", token: $("token").value.trim() };
+  session.set(TOKEN_KEY, auth.token);
+  $("token").value = "";
+  await enter("連線失敗：");
 });
 $("logout").addEventListener("click", () => logout());
 
@@ -487,7 +606,7 @@ function tick() {
 }
 
 async function pollMonitor() {
-  if (!token) return;
+  if (!auth) return;
   const ids = shown === null ? [] : shown;
   const q = ids.map((id) => `world_id=${encodeURIComponent(id)}`).join("&");
   try {
@@ -839,11 +958,12 @@ $("tab-monitor").addEventListener("click", () => setView("monitor"));
 $("tab-manage").addEventListener("click", () => setView("manage"));
 
 async function start() {
+  const [me, profs] = await Promise.all([api("/me"), api("/profiles"), loadWorlds()]);
+  profiles = profs;
+  $("whoami").textContent = me.via === "token" ? "管理 Token" : (me.display_name || me.email);
+  $("whoami").title = me.email || "";
   $("gate").hidden = true;
   $("topbar").hidden = false;
-  try {
-    [profiles] = await Promise.all([api("/profiles"), loadWorlds()]);
-  } catch (e) { if (e.status !== 401) fail(e); return; }
   if (shown) {
     shown = shown.filter((id) => worlds.some((w) => w.id === id));
     if (!shown.length) shown = null;
@@ -854,7 +974,7 @@ async function start() {
   startPolling();
 }
 
-if (token) start(); else showGate();
+if (auth) enter("讀取失敗："); else showGate();
 </script>
 </body>
 </html>

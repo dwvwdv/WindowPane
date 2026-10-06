@@ -151,3 +151,8 @@ class Repository(Protocol):
 
     # --- device input ------------------------------------------------------------------
     def add_device_input(self, item: DeviceInput) -> None: ...
+
+    # --- dashboard admins ----------------------------------------------------------------
+    def get_admin_name(self, user_id: str) -> str | None:
+        """Display name if this Supabase Auth user is listed in ``worldpane.admins``, else None."""
+        ...

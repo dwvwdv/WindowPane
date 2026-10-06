@@ -74,7 +74,9 @@ Dashboard：<http://127.0.0.1:8000/dashboard>（見下方「Dashboard」）。
 | `WORLDPANE_REPOSITORY` | `memory` | `memory` / `postgres` |
 | `WORLDPANE_DATABASE_URL` | 空 | `postgres` 時必填；service-role DSN（支援 Supabase pooler） |
 | `WORLDPANE_SIMULATION_PROVIDER` | `core` | worldpane-core |
-| `WORLDPANE_ADMIN_TOKEN` | 空 | `/dashboard` 與 `/api/v1/admin` 的 Bearer token（至少 16 字元）；空 = 停用（admin API 回 503） |
+| `WORLDPANE_SUPABASE_URL` | 空 | Dashboard 用 Supabase Auth 登入：專案 URL（`https://<ref>.supabase.co`） |
+| `WORLDPANE_SUPABASE_ANON_KEY` | 空 | 同上，anon（publishable）key；本來就是給瀏覽器用的公開值。URL 與 key 要一起設 |
+| `WORLDPANE_ADMIN_TOKEN` | 空 | 選用：共用的 admin Bearer token（至少 16 字元），給腳本 / CI，或沒有 Supabase 時登入 Dashboard。兩種登入方式都沒設 = admin API 停用（503） |
 
 Repo 中不含任何 secret。
 
@@ -100,8 +102,28 @@ python3 scripts/export_openapi.py --check  # CI 用：過期時 exit 1（tests �
 
 ## Dashboard
 
-`GET /dashboard` 是單頁管理介面，所有資料都來自 `/api/v1/admin`（`Authorization: Bearer $WORLDPANE_ADMIN_TOKEN`）。
-Token 只存在瀏覽器分頁的 sessionStorage。
+`GET /dashboard` 是單頁管理介面，所有資料都來自 `/api/v1/admin`。
+
+### 登入（Supabase Auth，做法同 Lazyrhythm 的文章發佈後台）
+
+1. `.env` 設 `WORLDPANE_SUPABASE_URL` 與 `WORLDPANE_SUPABASE_ANON_KEY`（Supabase → Project Settings → API）。
+2. 在 Supabase → Authentication → Users 建立 email / 密碼帳號。
+3. 把帳號登錄成管理員（migration `20261006120000_dashboard_admins.sql` 建立的白名單表）：
+
+   ```sql
+   insert into worldpane.admins (user_id, display_name)
+   select id, '你的名字' from auth.users where email = 'you@example.com';
+   ```
+
+流程：瀏覽器直接向 Supabase Auth（GoTrue REST）用 email / 密碼登入，session 存在 localStorage，
+過期前 60 秒自動 refresh；呼叫 admin API 時帶 access token，後端用 `GET /auth/v1/user` 向 Supabase 確認身分
+（結果快取 60 秒），再檢查 `worldpane.admins`。登入成功但不在名單內 → 403 `not_admin`；
+Supabase 連不上 → 503 `auth_unavailable`。`worldpane.admins` 只有 service role 讀得到；在 Supabase 上
+`user_id` 是 `auth.users` 的外鍵（刪除帳號會一併移除），本機 Postgres 沒有 `auth` schema 時則只是 uuid 欄位。
+
+`WORLDPANE_ADMIN_TOKEN`（選用）是給腳本與 CI 的共用 token，也能在登入頁「改用管理 Token」登入；它只存在瀏覽器分頁的 sessionStorage。
+
+### 功能
 
 - **監視牆**：每 15 秒呼叫一次 `GET /admin/monitor`，同時顯示多個 World 的即時畫面（和裝置看到的 state 相同）；
   可選要看哪些 World、1–4 欄或自動版面、單一 World 放大、全螢幕。時鐘依各 World 的時區每秒走動。
@@ -112,6 +134,7 @@ Admin API（不在 `openapi.json`，那份是給 ESP32 的裝置合約）：
 
 | Method | Path | 說明 |
 |---|---|---|
+| `GET` | `/admin/me` | 目前登入的身分（`supabase` 帳號或 `token`） |
 | `GET` | `/admin/profiles` | 可選的官方行為 Profile |
 | `GET` | `/admin/worlds` | 所有 World（角色數、裝置數、revision） |
 | `POST` | `/admin/worlds` | 建立 World（不建立裝置），回傳 World 與配對碼 |
@@ -183,7 +206,8 @@ src/worldpane_server/
 ├─ api/admin_routes.py  /api/v1/admin（Dashboard 用）
 ├─ admin.py             AdminService：列出 / 建立 / 調整 World、監視牆
 ├─ static/dashboard.html  /dashboard 單頁介面
-├─ api/deps.py          Bearer device auth / admin token
+├─ api/deps.py          Bearer device auth / admin auth（Supabase session 或 admin token）
+├─ supabase_auth.py     向 Supabase Auth 驗證 access token（含短期快取）
 ├─ services.py          WorldService：編排 repo + simulation，ETag/revision、pairing
 ├─ schemas.py           API 合約（pydantic）
 ├─ domain.py            World / Character / Event / Device / PairingCode …（§28）

@@ -7,7 +7,8 @@
 # No Supabase (local / offline): also start a bundled Postgres with the same migrations + seed
 #   docker compose --profile local-db up -d --build
 #
-# Dashboard (/dashboard): set WORLDPANE_ADMIN_TOKEN in .env.
+# Dashboard (/dashboard): sign in with Supabase Auth (WORLDPANE_SUPABASE_URL / _ANON_KEY in .env,
+# account listed in worldpane.admins), or set WORLDPANE_ADMIN_TOKEN.
 # Other optional settings: see .env.example.
 name: worldpane
 
@@ -54,6 +55,8 @@ services:
       WORLDPANE_DEFAULT_TIMEZONE: ${WORLDPANE_DEFAULT_TIMEZONE:-Asia/Taipei}
       WORLDPANE_SEED_DEMO_WORLD: ${WORLDPANE_SEED_DEMO_WORLD:-false}
       WORLDPANE_DEMO_PAIRING_CODE: ${WORLDPANE_DEMO_PAIRING_CODE:-}
+      WORLDPANE_SUPABASE_URL: ${WORLDPANE_SUPABASE_URL:-}
+      WORLDPANE_SUPABASE_ANON_KEY: ${WORLDPANE_SUPABASE_ANON_KEY:-}
       WORLDPANE_ADMIN_TOKEN: ${WORLDPANE_ADMIN_TOKEN:-}
     ports:
       - "${WORLDPANE_PORT:-8000}:8000"

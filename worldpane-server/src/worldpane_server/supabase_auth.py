@@ -1,0 +1,79 @@
+"""Verify Supabase Auth access tokens for the dashboard.
+
+The browser signs in against Supabase Auth (GoTrue) directly and sends its access token to
+``/api/v1/admin``. The server asks GoTrue who the token belongs to (``GET /auth/v1/user``),
+which works with any JWT signing key the project uses and also rejects logged-out sessions.
+Answers are cached briefly so a dashboard polling every 15 s does not call GoTrue each time.
+Whether that user may use the dashboard is a separate check (``worldpane.admins``).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import threading
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+
+CACHE_SECONDS = 60
+CACHE_MAX = 256
+TIMEOUT_SECONDS = 5
+
+
+@dataclass(frozen=True)
+class AuthUser:
+    id: str
+    email: str
+
+
+class AuthUnavailable(Exception):
+    """Supabase Auth could not be reached or answered with a server error."""
+
+
+class SupabaseAuth:
+    def __init__(self, url: str, anon_key: str) -> None:
+        self.url = url.rstrip("/")
+        self.anon_key = anon_key
+        self._lock = threading.Lock()
+        self._cache: dict[str, tuple[float, AuthUser]] = {}
+
+    def verify(self, token: str) -> AuthUser | None:
+        """The user the access token belongs to, or None if GoTrue rejects it."""
+        if token.count(".") != 2:  # not a JWT; don't bother GoTrue
+            return None
+        key = hashlib.sha256(token.encode()).hexdigest()
+        now = time.monotonic()
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit and hit[0] > now:
+                return hit[1]
+        user = self._fetch_user(token)
+        if user is not None:
+            with self._lock:
+                if len(self._cache) >= CACHE_MAX:
+                    self._cache = {k: v for k, v in self._cache.items() if v[0] > now}
+                    if len(self._cache) >= CACHE_MAX:
+                        self._cache.clear()
+                self._cache[key] = (now + CACHE_SECONDS, user)
+        return user
+
+    def _fetch_user(self, token: str) -> AuthUser | None:
+        req = urllib.request.Request(
+            f"{self.url}/auth/v1/user",
+            headers={"apikey": self.anon_key, "Authorization": f"Bearer {token}"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if 400 <= exc.code < 500:
+                return None  # expired, malformed, logged out, unknown user
+            raise AuthUnavailable(f"Supabase Auth answered HTTP {exc.code}") from exc
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            raise AuthUnavailable(f"Supabase Auth unreachable: {exc}") from exc
+        user_id = body.get("id") if isinstance(body, dict) else None
+        if not isinstance(user_id, str) or not user_id:
+            return None
+        return AuthUser(id=user_id, email=str(body.get("email") or ""))
