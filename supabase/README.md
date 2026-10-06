@@ -5,9 +5,9 @@ WorldPane（窗間）的資料庫結構。所有物件都放在獨立的 **`worl
 ```
 supabase/
 ├── migrations/
-│   ├── 20261005120000_init_worldpane.sql   # schema、table、index、trigger、function、RLS、權限
-│   ├── 20261005130000_event_catalog.sql    # 事件目錄 event_definitions、profile_event_pools、device_inputs
-│   └── 20261006120000_dashboard_admins.sql # Dashboard 管理員白名單 worldpane.admins（Supabase Auth 帳號）
+│   ├── 20261006144121_init_worldpane.sql   # schema、table、index、trigger、function、RLS、權限
+│   ├── 20261006144152_event_catalog.sql    # 事件目錄 event_definitions、profile_event_pools、device_inputs
+│   └── 20261006144203_dashboard_admins.sql # Dashboard 管理員白名單 worldpane.admins（Supabase Auth 帳號）
 ├── seed.sql                                 # 由 worldpane-core/scripts/gen_seed_sql.py 產生：官方事件目錄、官方 Profile、Demo World
 └── README.md
 ```
@@ -81,14 +81,18 @@ enabled = true
 sql_paths = ["./seed.sql"]
 ```
 
-推到遠端專案：`supabase db push`（只推 migration，不會跑 seed）。**seed 只給本機開發用。** 遠端不需要 seed：`worldpane-server` 啟動時會自動補上官方事件目錄與 Profile 模板（`world_id = NULL`），已存在的列不會被覆蓋。
+遠端：WorldPane 用的是多個 App 共用的 Supabase 專案（`pwrwclutauqxbqsqfkjj`，各 App 各自一個 schema），
+2026-10-06 已套用目前三個 migration。共用專案的 migration 歷史裡有其他 App 的版本，所以**不要從這個 repo 跑
+`supabase db push`**；新的 migration 請單獨套用（Supabase MCP `apply_migration`、SQL Editor 或下面的 psql），
+再把 repo 裡的檔名改成實際記錄的版本號（`supabase_migrations.schema_migrations`），兩邊才對得上。
+seed 不會套到遠端。**seed 只給本機開發用。** 遠端不需要 seed：`worldpane-server` 啟動時會自動補上官方事件目錄與 Profile 模板（`world_id = NULL`），已存在的列不會被覆蓋。
 
 不用 CLI、直接用 psql 也可以（需要已存在 `service_role` 角色，Supabase 內建）：
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005120000_init_worldpane.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005130000_event_catalog.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261006120000_dashboard_admins.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261006144121_init_worldpane.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261006144152_event_catalog.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261006144203_dashboard_admins.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql   # 選用：本機開發才需要
 ```
 

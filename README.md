@@ -54,14 +54,13 @@ device registration、World pairing、revision / ETag），以及 Docker 部署�
 
 | 項目 | 說明 |
 |---|---|
-| 部署前套用 schema | 遠端 Supabase 專案需先 `supabase db push`（或用 psql 依序套用 `supabase/migrations` 的所有 migration）；截至 2026-10-06 尚未套用 |
 | §34 TBD 數值 | 跳餐機率、請假機率、各事件 weight / duration / cooldown 目前都是佔位值，待定案後直接改 DB |
 | 國定假日 | 只把週末當假日；core 有 `World.holiday_dates`，但 DB / server 還沒有假日行事曆 |
 | 夜間睡覺 | 沒有睡覺事件，最後一個事件結束後到隔天早上都是 idle |
 | Device Preference API（§23） | 表已建立（`device_preferences`），但沒有 endpoint |
 | 安全 | `/device/pair`、`POST /world` 沒有 rate limit；沒有 token 撤銷 / 裝置解綁（Dashboard 也還不能解綁裝置）|
 | Dashboard 權限 | 登入用 Supabase Auth，`worldpane.admins` 裡的帳號全部是同等權限（沒有唯讀 / 分 World 授權）；admin API 沒有 rate limit |
-| Migration 自動部署 | CI 只發布 image；Supabase migration 仍需手動 `supabase db push` |
+| Migration 自動部署 | CI 只發布 image；新的 Supabase migration 仍需手動套用（共用專案，見 [supabase README](./supabase/README.md)） |
 | `POST /device/input` | 只記錄，不影響模擬 |
 | ESP32 firmware（Phase 3–5） | 尚未開始；API 合約在 [`worldpane-server/openapi.json`](./worldpane-server/openapi.json) |
 

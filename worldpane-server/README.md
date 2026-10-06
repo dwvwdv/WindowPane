@@ -13,7 +13,7 @@ WorldPane（窗間）Backend API 骨架：Display API、World History、Device P
 
 預設接 Supabase：
 
-1. 先把 `supabase/migrations` 套用到你的 Supabase 專案（例如 `supabase db push`）。
+1. 確認 `supabase/migrations` 已套用到 Supabase 專案（目前的共用專案已套用，作法見 `../supabase/README.md`）。
 2. 把根目錄的 `.env.example` 複製成 `.env`，在 `WORLDPANE_DATABASE_URL` 填 service-role 的 Postgres 連線字串（Project Settings → Database，pooler 可用）。
 3. 在 repo 根目錄執行：
 
@@ -108,7 +108,7 @@ python3 scripts/export_openapi.py --check  # CI 用：過期時 exit 1（tests �
 
 1. `.env` 設 `WORLDPANE_SUPABASE_URL` 與 `WORLDPANE_SUPABASE_ANON_KEY`（Supabase → Project Settings → API）。
 2. 在 Supabase → Authentication → Users 建立 email / 密碼帳號。
-3. 把帳號登錄成管理員（migration `20261006120000_dashboard_admins.sql` 建立的白名單表）：
+3. 把帳號登錄成管理員（migration `20261006144203_dashboard_admins.sql` 建立的白名單表）：
 
    ```sql
    insert into worldpane.admins (user_id, display_name)
