@@ -393,15 +393,19 @@ class AuthUnavailable extends Error {}
 
 // Only an explicit rejection of the refresh token ends the session (null); anything else throws.
 async function refresh() {
+  const session = auth;
   let r;
   try {
-    r = await gotrue("token?grant_type=refresh_token", { refresh_token: auth.refreshToken });
+    r = await gotrue("token?grant_type=refresh_token", { refresh_token: session.refreshToken });
   } catch {
     throw new AuthUnavailable("連不到 Supabase Auth，稍後會自動重試。");
   }
+  // Signed out (or in as someone else) while waiting: never bring the old session back.
+  if (auth !== session) return null;
   if ([400, 401, 403].includes(r.status)) { clearAuth(); return null; }
   if (!r.ok) throw new AuthUnavailable(`Supabase Auth 暫時無法使用（HTTP ${r.status}），稍後會自動重試。`);
-  return storeSupabase(await r.json());
+  const body = await r.json();
+  return auth === session ? storeSupabase(body) : null;
 }
 
 // A valid bearer for the admin API, refreshing the Supabase session when it is about to expire.
@@ -763,7 +767,7 @@ function renderDetail() {
           const enabled = o.enabled ?? e.enabled;
           return `<tr data-ev="${esc(e.key)}"><td>${esc(e.label)} <span class="mono" style="color:var(--muted)">${esc(e.key)}</span></td>
             <td><input type="checkbox" data-f="enabled"${enabled ? " checked" : ""} aria-label="啟用 ${esc(e.label)}"></td>
-            <td><input type="number" data-f="weight" min="0" step="1" value="${esc(o.weight ?? "")}" placeholder="${esc(e.weight ?? "")}" aria-label="${esc(e.label)} 權重"></td>
+            <td><input type="number" data-f="weight" min="0" step="any" value="${esc(o.weight ?? "")}" placeholder="${esc(e.weight ?? "")}" aria-label="${esc(e.label)} 權重"></td>
             <td class="mono" style="color:var(--muted)">${e.enabled ? "啟用" : "停用"} / ${esc(e.weight ?? "—")}</td></tr>`;
         }).join("")}</tbody>
       </table></div>
