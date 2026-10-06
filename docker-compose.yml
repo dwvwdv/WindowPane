@@ -15,7 +15,7 @@ name: worldpane
 services:
   db:
     profiles: ["local-db"]
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: worldpane
@@ -23,7 +23,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-worldpane}
       WORLDPANE_DB_PASSWORD: ${WORLDPANE_DB_PASSWORD:-worldpane}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - db-data:/var/lib/postgresql
       - ./supabase:/supabase:ro
       - ./docker/db/init-worldpane.sh:/docker-entrypoint-initdb.d/10-worldpane.sh:ro
     healthcheck:

@@ -1,6 +1,6 @@
 # worldpane-core
 
-WorldPane（窗間）的 **Simulation Core**：純 Python 3.11 套件，無 DB、無 Web、無第三方依賴。
+WorldPane（窗間）的 **Simulation Core**：純 Python 套件（3.12+），無 DB、無 Web、無第三方依賴。
 
 給定 `World + Characters(1..N) + Relationships + 當地日期`，決定性地產生當日完整 Event Timeline
 （規格 §4–§17、§31、§34、§35 Phase 1）。
