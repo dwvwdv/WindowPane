@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from zoneinfo import ZoneInfo
 
-from worldpane_core.catalog import build_shared_event_config, materialize
+from worldpane_core.catalog import CONTEXTS, build_shared_event_config, materialize
 from worldpane_core.profiles import OFFICIAL_PROFILES
 
 from . import schemas
@@ -26,17 +26,26 @@ def _number(v: object) -> float | None:
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
-def _enabled_problems(where: str, ov: object) -> list[str]:
-    """``enabled`` must be a real boolean: core only tests truthiness, so "false" would enable."""
+def _override_problems(where: str, ov: object, fields: set[str], nested: bool = True) -> list[str]:
+    """Checks core leaves to the generator: unknown fields (a typo such as "weigth" would be kept
+    and silently do nothing), non-boolean ``enabled`` (core only tests truthiness, so "false"
+    would enable) and ``context_overrides`` that are not ``{context: overrides}``."""
     if not isinstance(ov, dict):
         return []  # core reports non-object overrides itself
-    problems = []
+    allowed = fields | ({"context_overrides"} if nested else set())
+    problems = [f"{where}.{k}: unknown field" for k in sorted(set(ov) - allowed)]
     if "enabled" in ov and not isinstance(ov["enabled"], bool):
         problems.append(f"{where}.enabled must be true or false")
-    contexts = ov.get("context_overrides")
+    contexts = ov.get("context_overrides") if nested else None
     if isinstance(contexts, dict):
         for ctx, ctx_ov in contexts.items():
-            problems += _enabled_problems(f"{where}.context_overrides.{ctx}", ctx_ov)
+            if ctx not in CONTEXTS:
+                problems.append(f"{where}.context_overrides.{ctx}: unknown context "
+                                f"(one of {', '.join(CONTEXTS)})")
+            elif not isinstance(ctx_ov, dict):
+                problems.append(f"{where}.context_overrides.{ctx} must be an object")
+            else:
+                problems += _override_problems(f"{where}.context_overrides.{ctx}", ctx_ov, fields, nested=False)
     elif contexts is not None:
         problems.append(f"{where}.context_overrides must be an object of context -> overrides")
     return problems
@@ -154,8 +163,10 @@ class AdminService:
         elif isinstance(overrides, dict):
             known = {d.key for d in world.shared_event_definitions}
             problems += [f"overrides.{k}: unknown shared event" for k in sorted(set(overrides) - known)]
+            # Fields a shared event has once materialised; "type" is its identity, not a setting.
+            fields = {f for d in world.shared_event_definitions for f in materialize(d)} - {"type"}
             for key, ov in overrides.items():
-                problems += _enabled_problems(f"overrides.{key}", ov)
+                problems += _override_problems(f"overrides.{key}", ov, fields)
         # worldpane-core skips bad values at generation time; here they are a 422 instead.
         build_shared_event_config(cfg, world.shared_event_definitions, on_invalid=problems.append)
         if problems:

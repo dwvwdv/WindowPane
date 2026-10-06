@@ -129,6 +129,13 @@ def test_rename_and_tune_shared_events(client):
     ({"overrides": {"date": {"context_overrides": {"holiday": {"enabled": 0}}}}},
      "overrides.date.context_overrides.holiday.enabled"),
     ({"overrides": {"date": {"context_overrides": []}}}, "overrides.date.context_overrides"),
+    ({"overrides": {"date": {"weigth": 0}}}, "overrides.date.weigth: unknown field"),
+    ({"overrides": {"date": {"type": "other"}}}, "overrides.date.type: unknown field"),
+    ({"overrides": {"date": {"context_overrides": {"weekend": {"weight": 1}}}}}, "unknown context"),
+    ({"overrides": {"date": {"context_overrides": {"holiday": {"wieght": 1}}}}},
+     "overrides.date.context_overrides.holiday.wieght: unknown field"),
+    ({"overrides": {"date": {"context_overrides": {"holiday": {"context_overrides": {}}}}}},
+     "holiday.context_overrides: unknown field"),
 ])
 def test_invalid_shared_config_is_a_422_and_not_stored(client, cfg, fragment):
     before = client.get(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN).json()["shared_event_config"]
@@ -138,6 +145,32 @@ def test_invalid_shared_config_is_a_422_and_not_stored(client, cfg, fragment):
     assert fragment in r.json()["detail"]["message"]
     after = client.get(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN).json()["shared_event_config"]
     assert after == before
+
+
+def test_valid_nested_overrides_are_accepted(client):
+    cfg = {"overrides": {"date": {"weight": 5, "allowed_time": [["19:00", "22:00"]],
+                                  "context_overrides": {"holiday": {"weight": 40, "enabled": True}}}}}
+    r = client.patch(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN, json={"shared_event_config": cfg})
+    assert r.status_code == 200, r.text
+
+
+def test_world_and_character_edits_bump_the_revision(client):
+    def rev() -> int:
+        return client.get(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN).json()["revision"]
+
+    r0 = rev()
+    assert client.patch(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN, json={"name": "改名"}).json()["revision"] > r0
+    r1 = rev()
+    client.patch(f"{A}/worlds/{DEMO_WORLD_ID}/characters/{DEMO_CHARACTER_IDS[0]}", headers=ADMIN,
+                 json={"display_name": "小白白"})
+    r2 = rev()
+    assert r2 > r1
+    client.post(f"{A}/worlds/{DEMO_WORLD_ID}/characters", headers=ADMIN, json={
+        "display_name": "小橘", "appearance": "xiaoju", "profile_key": "official.freelancer.v1"})
+    r3 = rev()
+    assert r3 > r2
+    client.delete(f"{A}/worlds/{DEMO_WORLD_ID}/characters/{DEMO_CHARACTER_IDS[1]}", headers=ADMIN)
+    assert rev() > r3
 
 
 def test_disabled_shared_event_stays_out_of_new_plans(client, clock):

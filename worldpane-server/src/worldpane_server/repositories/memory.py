@@ -97,6 +97,7 @@ class InMemoryRepository:
                 w.name = name
             if shared_event_config is not None:
                 w.shared_event_config = copy.deepcopy(shared_event_config)
+            w.revision += 1  # like the Postgres worlds_bump_revision trigger
 
     def bump_world_revision(self, world_id: str) -> int:
         with self._lock:
@@ -120,6 +121,7 @@ class InMemoryRepository:
                 raise KeyError(character.world_id)
             self._characters[character.world_id].append(copy.deepcopy(character))
             self._relationships[character.world_id].extend(copy.deepcopy(r) for r in relationships)
+            self._worlds[character.world_id].revision += 1  # like characters_bump_revision
 
     def list_characters(self, world_id: str, include_archived: bool = False) -> list[Character]:
         with self._lock:
@@ -146,6 +148,7 @@ class InMemoryRepository:
                 c.appearance_key = appearance_key
             if sort_order is not None:
                 c.sort_order = sort_order
+            self._worlds[c.world_id].revision += 1
 
     def archive_character(self, character_id: str, at: datetime, *, keep_one_active: bool = False) -> bool:
         with self._lock:
@@ -156,6 +159,7 @@ class InMemoryRepository:
             if keep_one_active and not others:
                 return False
             c.archived_at = at
+            self._worlds[c.world_id].revision += 1
             return True
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
