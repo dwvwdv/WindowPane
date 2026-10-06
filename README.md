@@ -68,8 +68,8 @@ device registration、World pairing、revision / ETag），以及 Docker 部署�
 
 | Workflow | 觸發 | 內容 |
 |---|---|---|
-| [`core.yml`](./.github/workflows/core.yml) | `worldpane-core/**`、`supabase/seed.sql` | Python 3.11 / 3.12 跑 core 測試；檢查 `seed.sql` 與 core 預設一致 |
-| [`server.yml`](./.github/workflows/server.yml) | `worldpane-server/**`、`worldpane-core/**`、`supabase/**`、`docker/**`、`docker-compose.yml` | server 測試同時跑 in-memory 與 Postgres 16（用 `docker/db/init-worldpane.sh` 套 migrations）；檢查 `openapi.json`；build image 後用 `docker compose --profile local-db` 冒煙測試；push 到 `master` 時發布 `ghcr.io/dwvwdv/worldpane-server:latest` 與 `:sha-<commit>` |
+| [`core.yml`](./.github/workflows/core.yml) | `worldpane-core/**`、`supabase/seed.sql` | Python 3.12 / 3.13 / 3.14 跑 core 測試；檢查 `seed.sql` 與 core 預設一致 |
+| [`server.yml`](./.github/workflows/server.yml) | `worldpane-server/**`、`worldpane-core/**`、`supabase/**`、`docker/**`、`docker-compose.yml` | server 測試（Python 3.14）同時跑 in-memory 與 Postgres 15（與 Supabase 專案相同）（用 `docker/db/init-worldpane.sh` 套 migrations）；檢查 `openapi.json`；build image 後用 `docker compose --profile local-db` 冒煙測試；push 到 `master` 時發布 `ghcr.io/dwvwdv/worldpane-server:latest` 與 `:sha-<commit>` |
 
 PR 只跑測試和 build，不會 push image。
 

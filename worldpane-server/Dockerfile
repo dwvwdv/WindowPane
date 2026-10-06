@@ -1,6 +1,6 @@
 # WorldPane backend image. Build from the repository root (it needs worldpane-core too):
 #   docker build -f worldpane-server/Dockerfile -t worldpane-server .
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
