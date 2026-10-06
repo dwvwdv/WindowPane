@@ -44,6 +44,7 @@ class ServiceError(Exception):
 class StateResult:
     state: schemas.WorldState
     etag: str
+    characters: list[Character]  # active characters, in the order of state.characters
 
 
 class WorldService:
@@ -96,8 +97,9 @@ class WorldService:
         return events
 
     # --- display state --------------------------------------------------------------------
-    def device_state(self, world_id: str) -> StateResult:
-        world = self._world(world_id)
+    def device_state(self, world_id: str, world: World | None = None) -> StateResult:
+        """``world`` may be passed when the caller already loaded it (saves a query)."""
+        world = world if world is not None and world.id == world_id else self._world(world_id)
         now = self.clock.now()
         tz = ZoneInfo(world.timezone)
         characters = self.repo.list_characters(world.id)
@@ -130,7 +132,7 @@ class WorldService:
             world_id=world.id,
             characters=char_states,
         )
-        return StateResult(state=state, etag=make_etag(world.id, revision))
+        return StateResult(state=state, etag=make_etag(world.id, revision), characters=characters)
 
     # --- history --------------------------------------------------------------------------
     def history(self, world_id: str, local_date: date) -> schemas.WorldHistory:

@@ -3,12 +3,15 @@
 The browser signs in against Supabase Auth (GoTrue) directly and sends its access token to
 ``/api/v1/admin``. The server asks GoTrue who the token belongs to (``GET /auth/v1/user``),
 which works with any JWT signing key the project uses and also rejects logged-out sessions.
-Answers are cached briefly so a dashboard polling every 15 s does not call GoTrue each time.
+Accepted tokens are cached for at most ``CACHE_SECONDS`` and never past their own ``exp``, so a
+dashboard polling every 15 s does not call GoTrue each time; a logged-out token can therefore
+still be accepted for up to ``CACHE_SECONDS``.
 Whether that user may use the dashboard is a separate check (``worldpane.admins``).
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import threading
@@ -17,7 +20,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-CACHE_SECONDS = 60
+CACHE_SECONDS = 30
 CACHE_MAX = 256
 TIMEOUT_SECONDS = 5
 # Answers that say nothing about the token itself (timeout, rate limit): retry, don't sign out.
@@ -28,6 +31,17 @@ TRANSIENT_STATUS = {408, 429}
 class AuthUser:
     id: str
     email: str
+
+
+def _seconds_left(token: str) -> float:
+    """Seconds until the JWT's ``exp`` (0 if absent or unreadable). Only bounds the cache of a
+    token GoTrue has just accepted, so the payload is read without checking the signature."""
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        return max(0.0, float(claims["exp"]) - time.time())
+    except (IndexError, KeyError, TypeError, ValueError):
+        return 0.0
 
 
 class AuthUnavailable(Exception):
@@ -52,13 +66,14 @@ class SupabaseAuth:
             if hit and hit[0] > now:
                 return hit[1]
         user = self._fetch_user(token)
-        if user is not None:
+        ttl = min(CACHE_SECONDS, _seconds_left(token)) if user is not None else 0
+        if ttl > 0:
             with self._lock:
                 if len(self._cache) >= CACHE_MAX:
                     self._cache = {k: v for k, v in self._cache.items() if v[0] > now}
                     if len(self._cache) >= CACHE_MAX:
                         self._cache.clear()
-                self._cache[key] = (now + CACHE_SECONDS, user)
+                self._cache[key] = (now + ttl, user)
         return user
 
     def _fetch_user(self, token: str) -> AuthUser | None:

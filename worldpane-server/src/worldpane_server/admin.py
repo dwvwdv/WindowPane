@@ -145,8 +145,9 @@ class AdminService:
             world = self.repo.get_world(world_id)
             if world is None:
                 continue  # deleted meanwhile; the dashboard drops the tile
-            state = self.service.device_state(world.id).state
-            names = {c.id: c.display_name for c in self.repo.list_characters(world.id)}
+            result = self.service.device_state(world.id, world)
+            state = result.state
+            names = {c.id: c.display_name for c in result.characters}
             out.append(schemas.MonitorWorld(
                 world_id=world.id, name=world.name, timezone=world.timezone,
                 server_time=state.server_time, revision=state.revision,

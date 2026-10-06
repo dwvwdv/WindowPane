@@ -3,8 +3,10 @@ and the shared admin token as a fallback."""
 
 from __future__ import annotations
 
+import base64
 import io
 import json
+import time
 import re
 import urllib.error
 
@@ -144,15 +146,43 @@ def _gotrue(monkeypatch, handler):
     return calls
 
 
+def _jwt(**claims) -> str:
+    def part(obj) -> str:
+        return base64.urlsafe_b64encode(json.dumps(obj).encode()).decode().rstrip("=")
+    return f"{part({'alg': 'HS256'})}.{part(claims)}.sig"
+
+
 def test_verify_asks_gotrue_and_caches(monkeypatch):
     calls = _gotrue(monkeypatch, lambda req: _Resp(json.dumps({"id": ADMIN_ID, "email": "a@x"}).encode()))
     sb = SupabaseAuth(SB_URL + "/", "anon-key")
-    assert sb.verify(ADMIN_JWT) == AuthUser(ADMIN_ID, "a@x")
-    assert sb.verify(ADMIN_JWT) == AuthUser(ADMIN_ID, "a@x")
+    token = _jwt(sub=ADMIN_ID, exp=time.time() + 3600)
+    assert sb.verify(token) == AuthUser(ADMIN_ID, "a@x")
+    assert sb.verify(token) == AuthUser(ADMIN_ID, "a@x")
     assert len(calls) == 1
     url, headers = calls[0]
     assert url == f"{SB_URL}/auth/v1/user"
-    assert headers["Apikey"] == "anon-key" and headers["Authorization"] == f"Bearer {ADMIN_JWT}"
+    assert headers["Apikey"] == "anon-key" and headers["Authorization"] == f"Bearer {token}"
+
+
+@pytest.mark.parametrize("token", [
+    _jwt(sub=ADMIN_ID),                          # no exp: nothing to bound the cache with
+    _jwt(sub=ADMIN_ID, exp=time.time() - 10),    # already expired
+    "header.admin.sig",                          # unreadable payload
+])
+def test_verify_never_caches_past_the_tokens_exp(monkeypatch, token):
+    calls = _gotrue(monkeypatch, lambda req: _Resp(json.dumps({"id": ADMIN_ID, "email": "a@x"}).encode()))
+    sb = SupabaseAuth(SB_URL, "anon-key")
+    sb.verify(token)
+    sb.verify(token)
+    assert len(calls) == 2
+
+
+def test_cache_entry_ends_at_exp(monkeypatch):
+    _gotrue(monkeypatch, lambda req: _Resp(json.dumps({"id": ADMIN_ID, "email": "a@x"}).encode()))
+    sb = SupabaseAuth(SB_URL, "anon-key")
+    sb.verify(_jwt(sub=ADMIN_ID, exp=time.time() + 5))
+    (expires_at, _), = sb._cache.values()
+    assert expires_at - time.monotonic() <= 5
 
 
 def test_verify_rejects_without_caching(monkeypatch):

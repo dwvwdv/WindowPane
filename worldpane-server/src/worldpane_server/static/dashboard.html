@@ -305,10 +305,12 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
 const pad = (n) => String(n).padStart(2, "0");
 const hhmm = (m) => `${pad(Math.floor(m / 60) % 24)}:${pad(Math.floor(m) % 60)}`;
-const sceneOf = (s) => SCENES[s] || [s || "未知場景", "home"];
-const actOf = (a) => ACTS[a] || [a || "活動", "✨"];
+// Own keys only: a code like "constructor" must not resolve to Object.prototype members.
+const own = (map, k) => (Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null);
+const sceneOf = (s) => own(SCENES, s) || [s || "未知場景", "home"];
+const actOf = (a) => own(ACTS, a) || [a || "活動", "✨"];
 const hash = (s) => [...String(s)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
-const lookOf = (appearance) => LOOKS[appearance] || FALLBACK_LOOKS[hash(appearance) % FALLBACK_LOOKS.length];
+const lookOf = (appearance) => own(LOOKS, appearance) || FALLBACK_LOOKS[hash(appearance) % FALLBACK_LOOKS.length];
 const fmtTime = (iso) => iso ? iso.slice(0, 16).replace("T", " ") : "—";
 const store = (area) => ({
   get(k) { try { return area().getItem(k); } catch { return null; } },
@@ -350,15 +352,31 @@ const TOKEN_KEY = "worldpane.admin.token";
 const REFRESH_MARGIN_S = 60;
 let auth = readAuth();   // { kind: "supabase", accessToken, refreshToken, expiresAt, email } | { kind: "token", token } | null
 let refreshing = null;
+// Bumped on every sign-in / sign-out the user does here. A request that started under an older
+// generation must not log out (or report "expired" for) the session that replaced it.
+let authGen = 0;
 
-function readAuth() {
-  const t = session.get(TOKEN_KEY);
-  if (t && CONFIG.token_login) return { kind: "token", token: t };
-  if (!CONFIG.supabase_url) return null;
+function storedSupabase() {
   try {
     const s = JSON.parse(local.get(SB_SESSION_KEY));
     return s && s.accessToken && s.refreshToken ? Object.assign({ kind: "supabase" }, s) : null;
   } catch { return null; }
+}
+
+// Another tab may have refreshed already (refresh tokens are single-use): take its session.
+function adoptStored() {
+  const s = storedSupabase();
+  if (auth?.kind === "supabase" && s && s.refreshToken !== auth.refreshToken && s.expiresAt >= auth.expiresAt) {
+    auth = s;
+    return true;
+  }
+  return false;
+}
+
+function readAuth() {
+  const t = session.get(TOKEN_KEY);
+  if (t && CONFIG.token_login) return { kind: "token", token: t };
+  return CONFIG.supabase_url ? storedSupabase() : null;
 }
 
 function storeSupabase(tok) {
@@ -370,8 +388,12 @@ function storeSupabase(tok) {
 }
 
 function clearAuth() {
+  const prev = auth;
   auth = null;
-  local.set(SB_SESSION_KEY, null);
+  // Only remove the stored session if it is ours: another tab may have stored a newer one.
+  if (!prev || prev.kind !== "supabase" || storedSupabase()?.refreshToken === prev.refreshToken) {
+    local.set(SB_SESSION_KEY, null);
+  }
   session.set(TOKEN_KEY, null);
 }
 
@@ -385,6 +407,7 @@ async function signIn(email, password) {
   const r = await gotrue("token?grant_type=password", { email, password });
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(r.status === 400 ? "Email 或密碼錯誤。" : (body.error_description || body.msg || `登入失敗：HTTP ${r.status}`));
+  authGen++;
   return storeSupabase(body);
 }
 
@@ -402,7 +425,12 @@ async function refresh() {
   }
   // Signed out (or in as someone else) while waiting: never bring the old session back.
   if (auth !== session) return null;
-  if ([400, 401, 403].includes(r.status)) { clearAuth(); return null; }
+  if ([400, 401, 403].includes(r.status)) {
+    // Rejected because another tab used this refresh token first: carry on with its session.
+    if (adoptStored()) return auth;
+    clearAuth();
+    return null;
+  }
   if (!r.ok) throw new AuthUnavailable(`Supabase Auth 暫時無法使用（HTTP ${r.status}），稍後會自動重試。`);
   const body = await r.json();
   return auth === session ? storeSupabase(body) : null;
@@ -412,8 +440,13 @@ async function refresh() {
 async function accessToken() {
   if (!auth) return null;
   if (auth.kind === "token") return auth.token;
-  if (auth.expiresAt - REFRESH_MARGIN_S > Date.now() / 1000) return auth.accessToken;
-  refreshing ??= refresh().finally(() => { refreshing = null; });
+  const fresh = () => auth.expiresAt - REFRESH_MARGIN_S > Date.now() / 1000;
+  if (fresh()) return auth.accessToken;
+  if (adoptStored() && fresh()) return auth.accessToken;
+  // One refresh at a time across tabs; a tab that waited re-reads what the other one stored.
+  const run = () => (adoptStored() && fresh() ? auth : refresh());
+  refreshing ??= (navigator.locks ? navigator.locks.request("worldpane-dashboard-refresh", run) : run())
+    .finally(() => { refreshing = null; });
   try {
     return (await refreshing)?.accessToken ?? null;
   } catch (e) {
@@ -424,7 +457,9 @@ async function accessToken() {
 }
 
 async function signOut() {
+  adoptStored();  // sign out the session the tabs share now, not a stale copy
   const prev = auth;
+  authGen++;
   clearAuth();
   if (prev?.kind === "supabase") {
     try { await gotrue("logout", null, prev.accessToken); } catch { /* local session is gone either way */ }
@@ -444,21 +479,31 @@ class ApiError extends Error {
 }
 
 async function api(path, opts = {}) {
+  const gen = authGen;
+  // Only report "expired" for the session this request started with (not after a logout or a
+  // new sign-in that happened meanwhile).
+  const expired = (msg) => {
+    if (gen !== authGen) return;  // signed out / in again meanwhile: not this session's news
+    if (auth) logout(msg); else { stopPolling(); showGate(msg); }
+  };
   let bearer;
   try {
     bearer = await accessToken();
   } catch (e) {
     throw new ApiError(503, { detail: { code: "auth_unavailable", message: e.message } });
   }
-  if (!bearer) { logout("登入已過期，請重新登入。"); throw new ApiError(401, null); }
+  if (!bearer) { expired("登入已過期，請重新登入。"); throw new ApiError(401, null); }
   const headers = { Authorization: `Bearer ${bearer}` };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   const r = await fetch(API + path, { method: opts.method || "GET", headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
   const body = r.status === 204 ? null : await r.json().catch(() => null);
-  if (r.status === 401) { logout(auth?.kind === "token" ? "Token 無效或已更換，請重新登入。" : "登入已過期，請重新登入。"); throw new ApiError(401, body); }
+  if (r.status === 401) {
+    expired(auth?.kind === "token" ? "Token 無效或已更換，請重新登入。" : "登入已過期，請重新登入。");
+    throw new ApiError(401, body);
+  }
   if (r.status === 403 && body?.detail?.code === "not_admin") {
-    logout("這個帳號還不是 Dashboard 管理員：請把它加進 worldpane.admins。");
+    expired("這個帳號還不是 Dashboard 管理員：請把它加進 worldpane.admins。");
     throw new ApiError(403, body);
   }
   if (!r.ok) throw new ApiError(r.status, body);
@@ -526,12 +571,19 @@ $("login").addEventListener("submit", async (ev) => {
 });
 $("token-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
+  authGen++;
   auth = { kind: "token", token: $("token").value.trim() };
   session.set(TOKEN_KEY, auth.token);
   $("token").value = "";
   await enter("連線失敗：");
 });
 $("logout").addEventListener("click", () => logout());
+// Sessions are shared by every dashboard tab: follow sign-outs and refreshes done elsewhere.
+window.addEventListener("storage", (ev) => {
+  if (ev.key !== SB_SESSION_KEY || auth?.kind !== "supabase") return;
+  if (ev.newValue === null) { authGen++; auth = null; stopPolling(); showGate("已在其他分頁登出。"); }
+  else adoptStored();
+});
 
 /* ---------- shared data ---------- */
 let worlds = [], profiles = [];
@@ -627,12 +679,15 @@ function tick() {
   document.querySelectorAll(".tile").forEach((t) => t.classList.toggle("stale", !!stale));
 }
 
+let pollSeq = 0;
 async function pollMonitor() {
   if (!auth) return;
+  const seq = ++pollSeq;  // only the latest poll may draw: an older, slower answer is stale
   const ids = shown === null ? [] : shown;
   const q = ids.map((id) => `world_id=${encodeURIComponent(id)}`).join("&");
   try {
     const data = await api("/monitor" + (q ? `?${q}` : ""));
+    if (seq !== pollSeq) return;
     monitor = data.worlds;
     const at = Date.now();
     clocks = Object.fromEntries(monitor.map((w) => [w.world_id, { iso: w.server_time, at }]));
@@ -641,7 +696,7 @@ async function pollMonitor() {
     $("monstatus").textContent = `每 15 秒更新 · 上次 ${new Date().toLocaleTimeString()} · ${monitor.length} 個 World`;
     $("monstatus").classList.remove("err");
   } catch (e) {
-    if (e.status === 401) return;
+    if (e.status === 401 || seq !== pollSeq) return;
     $("monstatus").textContent = `更新失敗：${e.message}`;
     $("monstatus").classList.add("err");
   }
@@ -833,7 +888,9 @@ function renderDetail() {
         // Only what changed: an untouched field (e.g. an out-of-range sort order) is not resent.
         const body = {};
         tr.querySelectorAll("[data-f]").forEach((el) => {
-          if (el.value.trim() !== el.defaultValue.trim()) body[el.dataset.f] = el.type === "number" ? Number(el.value) : el.value.trim();
+          const v = el.value.trim();
+          if (v === "" && el.type === "number") return;  // cleared order = keep it, not 0
+          if (v !== el.defaultValue.trim()) body[el.dataset.f] = el.type === "number" ? Number(v) : v;
         });
         if (!Object.keys(body).length) { toast("沒有變更"); return; }
         current = await api(`/worlds/${w.id}/characters/${cid}`, { method: "PATCH", body });

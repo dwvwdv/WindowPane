@@ -281,9 +281,11 @@ class PostgresRepository:
     def add_character(self, character: Character, *, relationship_type: str | None = None) -> None:
         with self._pool.connection() as conn, conn.transaction():
             # Serialise additions (and archives) within one World, so what is derived below
-            # already includes characters added by a concurrent request.
+            # already includes characters added by a concurrent request. NO KEY UPDATE still
+            # conflicts with itself but not with the KEY SHARE locks of FK inserts, so devices
+            # materialising a plan for this World are not blocked meanwhile.
             locked = conn.execute(
-                "select 1 from worldpane.worlds where id = %s for update", (character.world_id,)
+                "select 1 from worldpane.worlds where id = %s for no key update", (character.world_id,)
             ).fetchone()
             if locked is None:
                 raise KeyError(character.world_id)
@@ -413,7 +415,7 @@ class PostgresRepository:
                 return True
             # Serialise archives within one World: after this lock, the count below sees any
             # archive committed meanwhile, so the last two characters cannot both go.
-            conn.execute("select 1 from worldpane.worlds where id = %s for update", (row["world_id"],))
+            conn.execute("select 1 from worldpane.worlds where id = %s for no key update", (row["world_id"],))
             if keep_one_active:
                 others = conn.execute(
                     """select count(*) as n from worldpane.characters
