@@ -87,8 +87,9 @@ class Repository(Protocol):
     # --- characters / relationships ------------------------------------------------------
     def add_character(self, character: Character, *, relationship_type: str | None = None) -> None:
         """Append ``character`` to its World in one transaction, under a World-level lock:
-        its ``sort_order`` becomes one after the World's last character (capped at
-        ``SORT_ORDER_MAX``) and, with ``relationship_type``, it gets that relationship with every
+        its ``sort_order`` becomes one after the World's last character (when that would pass
+        ``SORT_ORDER_MAX``, the World's characters are first renumbered 0..n-1 in their current
+        order) and, with ``relationship_type``, it gets that relationship with every
         active character. Deriving both under the lock means concurrent additions also relate
         to each other, and no daily plan can see the character without its relationships."""
         ...

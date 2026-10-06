@@ -291,7 +291,18 @@ class PostgresRepository:
                 "select max(sort_order) as m from worldpane.characters where world_id = %s",
                 (character.world_id,),
             ).fetchone()["m"]
-            c = replace(character, sort_order=min((last if last is not None else -1) + 1, SORT_ORDER_MAX))
+            last = -1 if last is None else last
+            if last >= SORT_ORDER_MAX:
+                # No room after the last one: renumber 0..n-1 in the current order, then append.
+                ids = [r["id"] for r in conn.execute(
+                    "select id from worldpane.characters where world_id = %s order by sort_order, id",
+                    (character.world_id,),
+                ).fetchall()]
+                with conn.cursor() as cur:
+                    cur.executemany("update worldpane.characters set sort_order = %s where id = %s",
+                                    list(enumerate(ids)))
+                last = len(ids) - 1
+            c = replace(character, sort_order=min(last + 1, SORT_ORDER_MAX))
             active = conn.execute(
                 """select id from worldpane.characters
                     where world_id = %s and archived_at is null order by sort_order, id""",

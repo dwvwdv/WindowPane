@@ -279,10 +279,23 @@ def test_new_character_order_stays_within_patch_bounds(client):
     assert r.status_code == 200
     new = client.post(f"{A}/worlds/{DEMO_WORLD_ID}/characters", headers=ADMIN, json={
         "display_name": "小橘", "appearance": "xiaoju", "profile_key": "official.freelancer.v1"}).json()["characters"][-1]
-    assert new["sort_order"] == 1000
+    assert new["sort_order"] <= 1000
     r = client.patch(f"{A}/worlds/{DEMO_WORLD_ID}/characters/{new['id']}", headers=ADMIN,
                      json={"display_name": "小橘子", "sort_order": new["sort_order"]})
     assert r.status_code == 200
+
+
+def test_appending_at_the_order_ceiling_renumbers_and_keeps_order(client):
+    client.patch(f"{A}/worlds/{DEMO_WORLD_ID}/characters/{DEMO_CHARACTER_IDS[0]}", headers=ADMIN,
+                 json={"sort_order": 1000})  # 小雞毛 (1), 小白 (1000)
+    names = ["甲", "乙", "丙"]
+    for n in names:
+        client.post(f"{A}/worlds/{DEMO_WORLD_ID}/characters", headers=ADMIN, json={
+            "display_name": n, "appearance": "amao", "profile_key": "official.freelancer.v1"})
+    chars = client.get(f"{A}/worlds/{DEMO_WORLD_ID}", headers=ADMIN).json()["characters"]
+    assert [c["display_name"] for c in chars] == ["小雞毛", "小白", *names]
+    orders = [c["sort_order"] for c in chars]
+    assert orders == sorted(set(orders)) and max(orders) <= 1000
 
 
 def test_concurrent_archives_keep_one_active_character(client, repo, clock):

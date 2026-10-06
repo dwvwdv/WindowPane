@@ -122,7 +122,13 @@ class InMemoryRepository:
                 raise KeyError(character.world_id)
             existing = self._characters[character.world_id]
             c = copy.deepcopy(character)
-            c.sort_order = min(max((x.sort_order for x in existing), default=-1) + 1, SORT_ORDER_MAX)
+            last = max((x.sort_order for x in existing), default=-1)
+            if last >= SORT_ORDER_MAX:
+                # No room after the last one: renumber 0..n-1 in the current order, then append.
+                for i, x in enumerate(sorted(existing, key=lambda x: (x.sort_order, x.id))):
+                    x.sort_order = i
+                last = len(existing) - 1
+            c.sort_order = min(last + 1, SORT_ORDER_MAX)
             if relationship_type:
                 self._relationships[c.world_id].extend(
                     CharacterRelationship(id=str(uuid.uuid4()), world_id=c.world_id, character_a_id=x.id,
