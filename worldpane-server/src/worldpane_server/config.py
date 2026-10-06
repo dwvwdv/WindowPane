@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # Postgres DSN (Supabase: the service-role connection string). Never commit a value.
     database_url: str = ""
 
+    # Bearer token for the admin API and the /dashboard page. Empty = admin API disabled.
+    admin_token: str = ""
+
     @model_validator(mode="after")
     def _ensure_secret(self) -> "Settings":
         if not self.pairing_code_secret:
@@ -47,6 +50,8 @@ class Settings(BaseSettings):
             len(self.demo_pairing_code) == 6 and self.demo_pairing_code.isdigit()
         ):
             raise ValueError("WORLDPANE_DEMO_PAIRING_CODE must be 6 digits")
+        if self.admin_token and len(self.admin_token) < 16:
+            raise ValueError("WORLDPANE_ADMIN_TOKEN must be at least 16 characters")
         return self
 
 

@@ -25,6 +25,7 @@ from ..domain import (
     Event,
     PairingCode,
     World,
+    WorldSummary,
 )
 
 
@@ -63,6 +64,15 @@ class Repository(Protocol):
 
     def get_world(self, world_id: str) -> World | None: ...
 
+    def list_world_summaries(self) -> list[WorldSummary]:
+        """Every World with its active character and device counts, oldest first (dashboard)."""
+        ...
+
+    def update_world(self, world_id: str, *, name: str | None = None,
+                     shared_event_config: dict | None = None) -> None:
+        """Change the given fields (``None`` = keep). Only affects plans generated afterwards."""
+        ...
+
     def bump_world_revision(self, world_id: str) -> int:
         """Atomically increment and return ``worlds.revision``."""
         ...
@@ -82,6 +92,15 @@ class Repository(Protocol):
 
         Archived (soft-deleted) characters are excluded unless ``include_archived``: they no
         longer get new plans, but their history must stay readable."""
+        ...
+
+    def update_character(self, character_id: str, *, display_name: str | None = None,
+                         appearance_key: str | None = None, sort_order: int | None = None) -> None:
+        """Change the given fields of a character (``None`` = keep)."""
+        ...
+
+    def archive_character(self, character_id: str, at: datetime) -> None:
+        """Soft delete: no plans after ``at``'s date, history stays readable (spec §17)."""
         ...
 
     def add_relationship(self, relationship: CharacterRelationship) -> None: ...

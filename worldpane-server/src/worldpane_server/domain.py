@@ -137,6 +137,20 @@ class PairingCode:
 
 
 @dataclass
+class WorldSummary:
+    """One row of the dashboard's World list (counts exclude archived characters)."""
+
+    id: str
+    name: str
+    timezone: str
+    simulation_start_date: date
+    created_at: datetime
+    revision: int
+    character_count: int
+    device_count: int
+
+
+@dataclass
 class DeviceInput:
     id: str
     device_id: str

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hmac
+
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from ..admin import AdminService
 from ..domain import Device
 from ..services import WorldService
 
@@ -28,3 +31,26 @@ def require_device(
     if device is None:
         raise unauthorized
     return device
+
+
+admin_bearer = HTTPBearer(auto_error=False, description="WORLDPANE_ADMIN_TOKEN")
+
+
+def get_admin(request: Request) -> AdminService:
+    return request.app.state.admin
+
+
+def require_admin(request: Request, creds: HTTPAuthorizationCredentials | None = Depends(admin_bearer)) -> None:
+    expected = request.app.state.settings.admin_token
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "admin_disabled", "message": "Set WORLDPANE_ADMIN_TOKEN to enable the admin API"},
+        )
+    given = creds.credentials if creds is not None and creds.scheme.lower() == "bearer" else ""
+    if not hmac.compare_digest(given.encode(), expected.encode()):
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "unauthorized", "message": "Missing or invalid admin token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )

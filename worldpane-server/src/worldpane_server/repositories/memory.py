@@ -15,6 +15,7 @@ from ..domain import (
     Event,
     PairingCode,
     World,
+    WorldSummary,
 )
 from .base import PairingCodeRejected
 
@@ -74,6 +75,28 @@ class InMemoryRepository:
             w = self._worlds.get(world_id)
             return copy.deepcopy(w) if w else None
 
+    def list_world_summaries(self) -> list[WorldSummary]:
+        with self._lock:
+            return [
+                WorldSummary(
+                    id=w.id, name=w.name, timezone=w.timezone,
+                    simulation_start_date=w.simulation_start_date, created_at=w.created_at,
+                    revision=w.revision,
+                    character_count=sum(c.archived_at is None for c in self._characters[w.id]),
+                    device_count=sum(d.world_id == w.id for d in self._devices.values()),
+                )
+                for w in sorted(self._worlds.values(), key=lambda w: (w.created_at, w.id))
+            ]
+
+    def update_world(self, world_id: str, *, name: str | None = None,
+                     shared_event_config: dict | None = None) -> None:
+        with self._lock:
+            w = self._worlds[world_id]
+            if name is not None:
+                w.name = name
+            if shared_event_config is not None:
+                w.shared_event_config = copy.deepcopy(shared_event_config)
+
     def bump_world_revision(self, world_id: str) -> int:
         with self._lock:
             w = self._worlds[world_id]
@@ -102,6 +125,30 @@ class InMemoryRepository:
                 if include_archived or c.archived_at is None
             ]
             return [copy.deepcopy(c) for c in sorted(chars, key=lambda c: (c.sort_order, c.id))]
+
+    def _character(self, character_id: str) -> Character:
+        for chars in self._characters.values():
+            for c in chars:
+                if c.id == character_id:
+                    return c
+        raise KeyError(character_id)
+
+    def update_character(self, character_id: str, *, display_name: str | None = None,
+                         appearance_key: str | None = None, sort_order: int | None = None) -> None:
+        with self._lock:
+            c = self._character(character_id)
+            if display_name is not None:
+                c.display_name = display_name
+            if appearance_key is not None:
+                c.appearance_key = appearance_key
+            if sort_order is not None:
+                c.sort_order = sort_order
+
+    def archive_character(self, character_id: str, at: datetime) -> None:
+        with self._lock:
+            c = self._character(character_id)
+            if c.archived_at is None:
+                c.archived_at = at
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
         with self._lock:
@@ -179,14 +226,6 @@ class InMemoryRepository:
     def add_device_input(self, item: DeviceInput) -> None:
         with self._lock:
             self._inputs.append(copy.deepcopy(item))
-
-    def archive_character(self, character_id: str, at: datetime) -> None:
-        """Not part of the Protocol; soft delete for tests/debugging."""
-        with self._lock:
-            for chars in self._characters.values():
-                for c in chars:
-                    if c.id == character_id:
-                        c.archived_at = at
 
     def list_device_inputs(self, world_id: str) -> list[DeviceInput]:
         """Not part of the Protocol; handy for tests/debugging."""

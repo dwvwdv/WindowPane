@@ -30,6 +30,7 @@ from ..domain import (
     Event,
     PairingCode,
     World,
+    WorldSummary,
 )
 from .base import PairingCodeRejected
 
@@ -173,6 +174,41 @@ class PostgresRepository:
             shared_event_definitions=[_definition(d) for d in defs],
         )
 
+    def list_world_summaries(self) -> list[WorldSummary]:
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                """select w.id, w.name, w.timezone, w.simulation_start_date, w.created_at, r.revision,
+                          (select count(*) from worldpane.characters c
+                            where c.world_id = w.id and c.archived_at is null) as character_count,
+                          (select count(*) from worldpane.devices d
+                            where d.world_id = w.id and d.revoked_at is null) as device_count
+                     from worldpane.worlds w
+                     join worldpane.world_revisions r on r.world_id = w.id
+                    order by w.created_at, w.id"""
+            ).fetchall()
+        return [
+            WorldSummary(
+                id=str(r["id"]), name=r["name"], timezone=r["timezone"],
+                simulation_start_date=r["simulation_start_date"], created_at=r["created_at"],
+                revision=r["revision"], character_count=r["character_count"],
+                device_count=r["device_count"],
+            )
+            for r in rows
+        ]
+
+    def update_world(self, world_id: str, *, name: str | None = None,
+                     shared_event_config: dict | None = None) -> None:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                """update worldpane.worlds
+                      set name = coalesce(%s, name),
+                          shared_event_config = coalesce(%s, shared_event_config)
+                    where id = %s returning id""",
+                (name, Jsonb(shared_event_config) if shared_event_config is not None else None, world_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(world_id)
+
     def bump_world_revision(self, world_id: str) -> int:
         with self._pool.connection() as conn:
             row = conn.execute(
@@ -315,6 +351,28 @@ class PostgresRepository:
             )
             for r in rows
         ]
+
+    def update_character(self, character_id: str, *, display_name: str | None = None,
+                         appearance_key: str | None = None, sort_order: int | None = None) -> None:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                """update worldpane.characters
+                      set display_name = coalesce(%s, display_name),
+                          appearance_key = coalesce(%s, appearance_key),
+                          sort_order = coalesce(%s, sort_order)
+                    where id = %s returning id""",
+                (display_name, appearance_key, sort_order, character_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(character_id)
+
+    def archive_character(self, character_id: str, at: datetime) -> None:
+        with self._pool.connection() as conn:
+            conn.execute(
+                """update worldpane.characters set archived_at = %s
+                    where id = %s and archived_at is null""",
+                (at, character_id),
+            )
 
     def add_relationship(self, relationship: CharacterRelationship) -> None:
         with self._pool.connection() as conn:

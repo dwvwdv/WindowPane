@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 from functools import lru_cache
+from importlib import resources
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
@@ -12,6 +13,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from worldpane_core.catalog import official_definitions
 
 from . import __version__
+from .admin import AdminService
+from .api.admin_routes import router as admin_router
 from .api.routes import router
 from .clock import Clock, SystemClock
 from .config import Settings, get_settings
@@ -37,6 +40,11 @@ def _demo_document(start: date, timezone: str) -> str:
     from .demo import demo_payload, page_document
 
     return page_document(demo_payload(start, 7, timezone))
+
+
+@lru_cache(maxsize=1)
+def _dashboard_document() -> str:
+    return resources.files("worldpane_server").joinpath("static/dashboard.html").read_text(encoding="utf-8")
 
 
 def build_repository(settings: Settings) -> Repository:
@@ -103,6 +111,7 @@ def create_app(
         ),
     )
     app.state.service = service
+    app.state.admin = AdminService(service)
     app.state.settings = settings
 
     @app.exception_handler(ServiceError)
@@ -115,6 +124,7 @@ def create_app(
         return {"status": "ok"}
 
     app.include_router(router)
+    app.include_router(admin_router)
 
     @app.get("/demo", include_in_schema=False, response_class=HTMLResponse)
     def demo_page() -> HTMLResponse:
@@ -122,6 +132,11 @@ def create_app(
         # this server. Computed in memory; it never touches the configured repository.
         today = service.clock.now().astimezone(ZoneInfo(settings.default_timezone)).date()
         return HTMLResponse(_demo_document(max(today, DEMO_START_DATE), settings.default_timezone))
+
+    @app.get("/dashboard", include_in_schema=False, response_class=HTMLResponse)
+    def dashboard_page() -> HTMLResponse:
+        # Static page; everything it shows comes from /api/v1/admin with the token typed in it.
+        return HTMLResponse(_dashboard_document(), headers={"Cache-Control": "no-cache"})
 
     # A database created from migrations only (e.g. `supabase db push`, no seed.sql) still gets
     # the official catalog and profile templates as global rows; existing rows are kept as-is.

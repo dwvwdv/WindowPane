@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>窗間 Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Same visual language as /demo: device bezels, one window per character. */
+:root {
+  --bg: #eef0f3; --panel: #ffffff; --ink: #1d2433; --muted: #5f6878; --line: #d5d9e1;
+  --accent: #3d5a98; --bezel: #2a2f3a; --danger: #b03a2e; --ok: #2f7d4f;
+  --home: #e8a46a; --school: #6aa57a; --office: #6f8fb8; --out: #c97b8f; --idle: #b9bfca;
+  --font-display: "LXGW WenKai TC", "Kaiti TC", "STKaiti", serif;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141821; --panel: #1c2230; --ink: #e6e9ef; --muted: #9aa3b4; --line: #2e3647;
+    --accent: #8fa9e0; --bezel: #0b0e14; --idle: #4a5263; --danger: #e07a6e; --ok: #6cc08e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141821; --panel: #1c2230; --ink: #e6e9ef; --muted: #9aa3b4; --line: #2e3647;
+  --accent: #8fa9e0; --bezel: #0b0e14; --idle: #4a5263; --danger: #e07a6e; --ok: #6cc08e; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1400px; margin: 0 auto; padding-inline: 16px; padding-block: 18px 48px; display: grid; gap: 16px; }
+header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0; letter-spacing: .02em; }
+h1 small { font-family: var(--font-body); font-size: .85rem; color: var(--muted); font-weight: 400; margin-left: .6em; letter-spacing: 0; }
+h2 { font-size: 1.05rem; margin: 0; }
+h3 { font-size: .95rem; margin: 0; color: var(--muted); font-weight: 500; }
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tabs button { border: 0; background: transparent; color: var(--muted); padding: 6px 16px; font: inherit; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 12px; font: inherit; font-size: .88rem; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+.btn.danger { color: var(--danger); }
+.btn.small { padding: 2px 8px; font-size: .8rem; }
+.btn:disabled { opacity: .5; cursor: default; }
+input[type="text"], input[type="number"], input[type="password"], input[type="date"], select, textarea {
+  font: inherit; font-size: .9rem; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink); min-width: 0; }
+textarea { font-family: var(--font-mono); font-size: .8rem; width: 100%; min-height: 180px; resize: vertical; }
+label.lbl, .lbl { font-size: .82rem; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+.note { font-size: .84rem; color: var(--muted); margin: 0; max-width: 75ch; }
+.mono { font-family: var(--font-mono); font-size: .8rem; font-variant-numeric: tabular-nums; }
+.status { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); }
+
+/* Login gate */
+.gate { max-width: 460px; margin: 10vh auto 0; }
+.gate input { flex: 1 1 220px; }
+.err { color: var(--danger); }
+
+/* Monitor wall */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 99px; padding: 2px 11px; font: inherit; font-size: .82rem; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.wall { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.wall[data-cols="1"] { grid-template-columns: 1fr; }
+.wall[data-cols="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wall[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wall[data-cols="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 720px) { .wall[data-cols] { grid-template-columns: 1fr; } }
+.wall.focused .tile:not(.focus) { display: none; }
+.wall.focused { grid-template-columns: 1fr; }
+.wall:fullscreen { background: var(--bg); padding: 16px; overflow: auto; align-content: start; }
+.tile { background: var(--bezel); border-radius: 16px; padding: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / .16); display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-width: 0; }
+.tile-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: #d9dee8; padding: 0 4px; }
+.tile-head .name { font-family: var(--font-display); font-size: 1.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-head .clock { font-family: var(--font-mono); font-size: 1rem; font-variant-numeric: tabular-nums; flex: none; }
+.tile-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: #8c95a6; font-family: var(--font-mono); font-size: .72rem; padding: 0 4px; flex-wrap: wrap; }
+.tile-foot .acts { display: flex; gap: 6px; }
+.tile-foot button { background: transparent; border: 1px solid #4a5263; color: #c3c9d4; border-radius: 6px; padding: 1px 8px; font: inherit; cursor: pointer; }
+.tile-foot button:hover { border-color: #c3c9d4; }
+.tile.stale .tile-head .clock { color: #e0a96d; }
+.screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; align-content: start; }
+.focus .screens { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.empty { color: var(--muted); text-align: center; padding: 40px 16px; border: 1px dashed var(--line); border-radius: 12px; }
+
+/* Character window (from /demo, scaled by --h) */
+.win { --h: 176px; --s: .68; position: relative; border-radius: 9px; overflow: hidden; height: var(--h); color: #fff; }
+.focus .win { --h: 260px; --s: 1; }
+.sky { position: absolute; inset: 0; transition: background 1.2s ease; }
+.room { position: absolute; left: 0; right: 0; bottom: 0; height: 58%; transition: background .6s ease; }
+.room::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: rgb(0 0 0 / .18); }
+.figure { position: absolute; left: calc(50% - 37px); bottom: calc(var(--h) * .4); width: 74px; height: 92px; transform: scale(var(--s)); transform-origin: 50% 100%; }
+.fig { position: absolute; inset: 0; }
+.figure .head { position: absolute; left: 50%; top: 0; width: 46px; height: 46px; transform: translateX(-50%); border-radius: 50%; background: var(--c); box-shadow: inset -4px -5px 0 rgb(0 0 0 / .12); }
+.figure .body { position: absolute; left: 50%; bottom: 0; width: 64px; height: 50px; transform: translateX(-50%); border-radius: 30px 30px 10px 10px; background: var(--c); box-shadow: inset -5px -6px 0 rgb(0 0 0 / .12); }
+.figure .eye { position: absolute; top: 19px; width: 5px; height: 6px; border-radius: 3px; background: #2a2f3a; }
+.figure .eye.l { left: 26px; } .figure .eye.r { left: 42px; }
+.figure.sleep .eye { height: 2px; top: 22px; }
+.act-icon { position: absolute; right: -14px; top: -8px; font-size: 26px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .3)); }
+@media (prefers-reduced-motion: no-preference) { .fig { animation: breathe 3.4s ease-in-out infinite; } }
+@keyframes breathe { 50% { transform: translateY(-2px); } }
+.cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 9px; background: rgb(10 14 22 / .55); display: grid; gap: 0; }
+.cap .who { display: flex; justify-content: space-between; gap: 6px; font-size: .72rem; opacity: .85; }
+.cap .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap .what { font-family: var(--font-display); font-size: 1.05rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap .when { font-family: var(--font-mono); font-size: .7rem; opacity: .8; font-variant-numeric: tabular-nums; }
+.focus .cap .what { font-size: 1.35rem; }
+
+/* Manage */
+.manage { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .manage { grid-template-columns: 1fr; } }
+.wlist { display: grid; gap: 6px; }
+.wlist button { text-align: left; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 10px; padding: 8px 10px; font: inherit; cursor: pointer; display: grid; gap: 1px; }
+.wlist button[aria-current="true"] { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.wlist .meta { font-size: .76rem; color: var(--muted); }
+.detail { display: grid; gap: 14px; min-width: 0; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; font-size: .88rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.scroll-x { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { color: var(--muted); font-weight: 500; font-size: .8rem; white-space: nowrap; }
+td input[type="text"] { width: 100%; min-width: 90px; }
+td input[type="number"] { width: 76px; }
+tr.archived td { color: var(--muted); }
+.pill { display: inline-block; padding: 0 8px; border-radius: 99px; font-size: .74rem; border: 1px solid var(--line); color: var(--muted); }
+.pill.on { color: var(--ok); border-color: currentColor; }
+.code { font-family: var(--font-mono); font-size: 2rem; letter-spacing: .18em; font-weight: 500; }
+.grid-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; }
+.grid-form label { display: grid; gap: 3px; }
+details summary { cursor: pointer; color: var(--muted); font-size: .88rem; }
+
+/* Timeline (from /demo) */
+.tl-inner { min-width: 620px; display: grid; gap: 6px; }
+.lane { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; }
+.lane .name { font-size: .82rem; color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track { position: relative; height: 28px; background: repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--line) calc(12.5% - 1px) 12.5%); border-radius: 6px; }
+.bar { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; background: var(--k); opacity: .9; overflow: hidden; white-space: nowrap; font-size: .7rem; color: #fff; padding: 0 3px; line-height: 22px; }
+.bar.base { top: 9px; bottom: 9px; opacity: .45; font-size: 0; }
+.bar.shared { box-shadow: inset 0 0 0 2px rgb(255 255 255 / .85); }
+.axis { display: grid; grid-template-columns: 64px 1fr; gap: 8px; }
+.axis .ticks { position: relative; height: 16px; font-family: var(--font-mono); font-size: .7rem; color: var(--muted); }
+.axis .ticks span { position: absolute; transform: translateX(-50%); }
+
+/* Dialog + toast */
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
+dialog::backdrop { background: rgb(10 14 22 / .45); }
+dialog form, dialog .body { padding: 16px; display: grid; gap: 12px; }
+.chars-edit { display: grid; gap: 6px; }
+.chars-edit .crow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 6px; align-items: center; }
+@media (max-width: 520px) { .chars-edit .crow { grid-template-columns: 1fr 1fr; } }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--panel); padding: 8px 14px; border-radius: 8px; font-size: .88rem; max-width: calc(100vw - 32px); box-shadow: 0 6px 20px rgb(0 0 0 / .25); z-index: 10; }
+.toast.err { background: var(--danger); color: #fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>窗間 Dashboard<small id="subtitle">World 監視與管理</small></h1>
+    <div class="row" id="topbar" hidden>
+      <div class="tabs" role="group" aria-label="檢視">
+        <button id="tab-monitor" type="button" aria-pressed="true">監視牆</button>
+        <button id="tab-manage" type="button" aria-pressed="false">World 管理</button>
+      </div>
+      <button class="btn" id="logout" type="button">登出</button>
+    </div>
+  </header>
+
+  <!-- Login -->
+  <section class="panel gate" id="gate">
+    <h2>輸入管理 Token</h2>
+    <form class="row" id="login">
+      <input id="token" type="password" autocomplete="current-password" placeholder="WORLDPANE_ADMIN_TOKEN" aria-label="管理 Token" required>
+      <button class="btn primary" type="submit">登入</button>
+    </form>
+    <div class="status" id="gatestatus"></div>
+    <p class="note">Token 是伺服器的 <code>WORLDPANE_ADMIN_TOKEN</code>，只存在這個分頁（sessionStorage），關掉分頁就要重新輸入。</p>
+  </section>
+
+  <!-- Monitor wall -->
+  <section id="monitor" hidden>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="toolbar">
+        <span class="lbl">顯示</span>
+        <div class="chips" id="chips"></div>
+      </div>
+      <div class="toolbar">
+        <label class="lbl" for="cols">版面</label>
+        <select id="cols">
+          <option value="">自動</option>
+          <option value="1">1 欄</option>
+          <option value="2">2 欄</option>
+          <option value="3">3 欄</option>
+          <option value="4">4 欄</option>
+        </select>
+        <button class="btn" id="fullscreen" type="button">全螢幕</button>
+        <button class="btn" id="refresh" type="button">立即更新</button>
+        <span class="status" id="monstatus">--</span>
+      </div>
+    </div>
+    <div class="wall" id="wall"></div>
+  </section>
+
+  <!-- Manage -->
+  <section class="manage" id="manage" hidden>
+    <aside class="panel">
+      <div class="row" style="justify-content:space-between">
+        <h2>Worlds</h2>
+        <button class="btn primary small" id="new-world" type="button">＋ 新增</button>
+      </div>
+      <div class="wlist" id="wlist"></div>
+    </aside>
+    <div class="detail" id="detail">
+      <div class="empty">從左邊選一個 World，或新增一個。</div>
+    </div>
+  </section>
+</div>
+
+<dialog id="create-dialog" aria-labelledby="create-title">
+  <form id="create-form" method="dialog">
+    <h2 id="create-title">新增 World</h2>
+    <div class="grid-form">
+      <label><span class="lbl">名稱</span><input id="cw-name" type="text" maxlength="80" value="新的房間" required></label>
+      <label><span class="lbl">時區（建立後不能改）</span><input id="cw-tz" type="text" list="tz-list" value="Asia/Taipei" required></label>
+      <label><span class="lbl">配對碼可用次數</span><input id="cw-uses" type="number" min="1" max="20" value="1"></label>
+    </div>
+    <div class="chars-edit">
+      <div class="row" style="justify-content:space-between"><h3>角色（1–12 位）</h3><button class="btn small" id="cw-add" type="button">＋ 角色</button></div>
+      <div id="cw-chars" class="chars-edit"></div>
+    </div>
+    <div class="status err" id="cw-err"></div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn" type="button" id="cw-cancel">取消</button>
+      <button class="btn primary" type="submit" id="cw-submit">建立</button>
+    </div>
+  </form>
+  <div class="body" id="create-result" hidden>
+    <h2>World 已建立</h2>
+    <p class="note">在裝置上輸入這組配對碼就能看到這個 World：</p>
+    <div class="code" id="cr-code"></div>
+    <div class="status" id="cr-exp"></div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn" type="button" id="cr-close">關閉</button>
+      <button class="btn primary" type="button" id="cr-open">前往管理</button>
+    </div>
+  </div>
+</dialog>
+
+<datalist id="tz-list">
+  <option value="Asia/Taipei"><option value="Asia/Tokyo"><option value="Asia/Hong_Kong"><option value="Asia/Shanghai">
+  <option value="Asia/Singapore"><option value="Asia/Seoul"><option value="Europe/London"><option value="Europe/Berlin">
+  <option value="America/New_York"><option value="America/Los_Angeles"><option value="Australia/Sydney"><option value="UTC">
+</datalist>
+<datalist id="looks-list"><option value="xiaobai"><option value="xiaojimao"></datalist>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+const API = "/api/v1/admin";
+const POLL_MS = 15000;
+
+const SCENES = {
+  home_kitchen: ["廚房", "home"], home_bathroom: ["浴室", "home"], home_living_room: ["客廳", "home"],
+  home_living_room_tv: ["客廳電視前", "home"], home_bedroom: ["臥室", "home"],
+  school_classroom: ["教室", "school"], school_cafeteria: ["學校餐廳", "school"],
+  office_desk: ["辦公桌", "office"], office_pantry: ["茶水間", "office"],
+  city_cafe: ["咖啡廳", "out"], cafe_laptop: ["咖啡廳", "out"], restaurant: ["餐廳", "out"],
+  mall: ["百貨公司", "out"], basketball_court: ["籃球場", "out"],
+};
+const ACTS = {
+  eating: ["吃飯", "🍚"], shower: ["洗澡", "🛁"], slacking: ["摸魚", "🫠"], reading: ["看書", "📖"],
+  date: ["約會", "💞"], in_class: ["上課", "✏️"], gaming: ["打電動", "🎮"], phone: ["滑手機", "📱"],
+  sleeping: ["睡覺", "💤"], working: ["工作", "💻"], idle: ["發呆", "☁️"], dining_out: ["外食", "🍜"],
+  shopping: ["逛街", "🛍️"], watch_movie: ["看電影", "🎬"], basketball: ["打球", "🏀"],
+};
+const ROOM = { home: "#c9895a", school: "#5d8f6b", office: "#5b7799", out: "#a86478", idle: "#7d8494" };
+const LOOKS = { xiaobai: "#f4f1ea", xiaojimao: "#f2c94c" };
+const FALLBACK_LOOKS = ["#9ad0c2", "#f0a6ca", "#b8c0ff", "#ffd6a5", "#caffbf", "#a0c4ff"];
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
+const pad = (n) => String(n).padStart(2, "0");
+const hhmm = (m) => `${pad(Math.floor(m / 60) % 24)}:${pad(Math.floor(m) % 60)}`;
+const sceneOf = (s) => SCENES[s] || [s || "未知場景", "home"];
+const actOf = (a) => ACTS[a] || [a || "活動", "✨"];
+const hash = (s) => [...String(s)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+const lookOf = (appearance) => LOOKS[appearance] || FALLBACK_LOOKS[hash(appearance) % FALLBACK_LOOKS.length];
+const fmtTime = (iso) => iso ? iso.slice(0, 16).replace("T", " ") : "—";
+const store = (area) => ({
+  get(k) { try { return area().getItem(k); } catch { return null; } },
+  set(k, v) { try { v == null ? area().removeItem(k) : area().setItem(k, v); } catch {} },
+});
+const session = store(() => sessionStorage);
+const local = store(() => localStorage);
+
+function sky(min) {
+  const h = min / 60;
+  if (h < 5 || h >= 20.5) return "linear-gradient(#0f1733, #26315a)";
+  if (h < 7) return "linear-gradient(#3b4a7a, #f0a37a)";
+  if (h < 16.5) return "linear-gradient(#7fb3e6, #cfe6f7)";
+  if (h < 18.5) return "linear-gradient(#5b6aa8, #f3a65f)";
+  return "linear-gradient(#232c55, #7d5b8c)";
+}
+
+// World-local "now" from a server_time (it carries the World's UTC offset) plus elapsed time.
+function worldNow(clock) {
+  const off = /([+-])(\d\d):?(\d\d)$/.exec(clock.iso);
+  const offMin = off ? (off[1] === "-" ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3])) : 0;
+  const t = new Date(Date.parse(clock.iso.replace(/(\.\d{3})\d+/, "$1")) + (Date.now() - clock.at) + offMin * 60000);
+  return { date: t.toISOString().slice(0, 10), minute: t.getUTCHours() * 60 + t.getUTCMinutes() + t.getUTCSeconds() / 60,
+    text: `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}:${pad(t.getUTCSeconds())}` };
+}
+// Today's date in an IANA timezone, for the history picker.
+function todayIn(tz) {
+  try { return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
+  catch { return new Date().toISOString().slice(0, 10); }
+}
+
+/* ---------- API ---------- */
+let token = session.get("worldpane.admin.token");
+
+class ApiError extends Error {
+  constructor(status, body) {
+    const d = body && body.detail;
+    super(typeof d === "object" && d && !Array.isArray(d) ? d.message
+      : Array.isArray(d) ? d.map((x) => `${(x.loc || []).slice(1).join(".")}: ${x.msg}`).join("；")
+      : `HTTP ${status}`);
+    this.status = status;
+    this.code = d && d.code;
+  }
+}
+
+async function api(path, opts = {}) {
+  const headers = { Authorization: `Bearer ${token}` };
+  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  const r = await fetch(API + path, { method: opts.method || "GET", headers,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+  const body = r.status === 204 ? null : await r.json().catch(() => null);
+  if (r.status === 401) { logout("Token 無效或已更換，請重新登入。"); throw new ApiError(401, body); }
+  if (!r.ok) throw new ApiError(r.status, body);
+  return body;
+}
+
+let toastTimer = null;
+function toast(text, isErr) {
+  const el = $("toast");
+  el.textContent = text;
+  el.classList.toggle("err", !!isErr);
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, isErr ? 6000 : 3000);
+}
+const fail = (e) => toast(e.message || String(e), true);
+
+/* ---------- login ---------- */
+function showGate(msg) {
+  $("gate").hidden = false;
+  $("topbar").hidden = true;
+  $("monitor").hidden = true;
+  $("manage").hidden = true;
+  $("gatestatus").textContent = msg || "";
+  $("gatestatus").classList.toggle("err", !!msg);
+}
+
+function logout(msg) {
+  token = null;
+  session.set("worldpane.admin.token", null);
+  stopPolling();
+  showGate(msg);
+}
+
+$("login").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  token = $("token").value.trim();
+  try {
+    await api("/worlds");
+    session.set("worldpane.admin.token", token);
+    $("token").value = "";
+    start();
+  } catch (e) {
+    if (e.status !== 401) showGate(e.code === "admin_disabled" ? "伺服器沒有設定 WORLDPANE_ADMIN_TOKEN，管理功能未啟用。" : `連線失敗：${e.message}`);
+  }
+});
+$("logout").addEventListener("click", () => logout());
+
+/* ---------- shared data ---------- */
+let worlds = [], profiles = [];
+async function loadWorlds() {
+  worlds = await api("/worlds");
+  renderChips();
+  renderWorldList();
+}
+
+/* ---------- monitor wall ---------- */
+// null = show every World (new ones included); otherwise the chosen ids.
+let shown = (() => { try { return JSON.parse(local.get("worldpane.dashboard.shown")); } catch { return null; } })();
+let monitor = [], clocks = {}, pollTimer = null, tickTimer = null, focusId = null, lastOk = 0;
+
+function isShown(id) { return shown === null || shown.includes(id); }
+
+function renderChips() {
+  const host = $("chips");
+  host.textContent = "";
+  const all = document.createElement("button");
+  all.type = "button"; all.className = "chip"; all.textContent = "全部";
+  all.setAttribute("aria-pressed", String(shown === null));
+  all.addEventListener("click", () => setShown(null));
+  host.appendChild(all);
+  for (const w of worlds) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = w.name;
+    b.setAttribute("aria-pressed", String(shown !== null && shown.includes(w.id)));
+    b.addEventListener("click", () => {
+      const cur = shown === null ? [] : shown.filter((id) => worlds.some((x) => x.id === id));
+      setShown(cur.includes(w.id) ? cur.filter((id) => id !== w.id) : [...cur, w.id]);
+    });
+    host.appendChild(b);
+  }
+}
+
+function setShown(next) {
+  shown = next && next.length ? next : null;
+  local.set("worldpane.dashboard.shown", shown ? JSON.stringify(shown) : null);
+  renderChips();
+  pollMonitor();
+}
+
+function windowHtml(c, min) {
+  const [sceneName, cat] = sceneOf(c.scene);
+  const [actName, icon] = actOf(c.activity);
+  const range = c.started_at ? `${c.started_at.slice(11, 16)}–${c.ends_at ? c.ends_at.slice(11, 16) : "?"}` : "";
+  return `<article class="win" aria-label="${esc(c.display_name)}：${esc(actName)}（${esc(sceneName)}）">
+    <div class="sky" style="background:${sky(min)}"></div>
+    <div class="room" style="background:${c.activity === "idle" ? ROOM.idle : ROOM[cat]}"></div>
+    <div class="figure ${c.activity === "sleeping" ? "sleep" : ""}" style="--c:${lookOf(c.appearance)}"><div class="fig">
+      <div class="body"></div><div class="head"></div><div class="eye l"></div><div class="eye r"></div>
+      <span class="act-icon" aria-hidden="true">${icon}</span></div>
+    </div>
+    <div class="cap">
+      <div class="who"><span>${esc(c.display_name || c.appearance)}</span><span>${esc(sceneName)}</span></div>
+      <div class="what">${esc(actName)}</div>
+      <div class="when">${range ? esc(range) : "&nbsp;"}</div>
+    </div>
+  </article>`;
+}
+
+function renderWall() {
+  const wall = $("wall");
+  wall.classList.toggle("focused", !!focusId && monitor.some((w) => w.world_id === focusId));
+  if (!monitor.length) {
+    wall.innerHTML = `<div class="empty">${worlds.length ? "沒有選擇要顯示的 World。" : "還沒有任何 World，到「World 管理」新增一個。"}</div>`;
+    return;
+  }
+  wall.innerHTML = monitor.map((w) => {
+    const now = worldNow(clocks[w.world_id]);
+    return `<section class="tile${w.world_id === focusId ? " focus" : ""}" data-id="${esc(w.world_id)}" aria-label="${esc(w.name)}">
+      <div class="tile-head"><span class="name" title="${esc(w.name)}">${esc(w.name)}</span><span class="clock">${now.text}</span></div>
+      <div class="screens">${w.characters.length ? w.characters.map((c) => windowHtml(c, now.minute)).join("")
+        : '<div class="empty" style="color:#8c95a6;border-color:#4a5263">沒有角色</div>'}</div>
+      <div class="tile-foot"><span>${esc(w.timezone)} · rev ${w.revision}</span>
+        <span class="acts"><button type="button" data-act="focus">${w.world_id === focusId ? "縮小" : "放大"}</button><button type="button" data-act="manage">管理</button></span></div>
+    </section>`;
+  }).join("");
+}
+
+// Clocks and skies move every second between polls; the state itself only changes on a poll.
+function tick() {
+  for (const tile of document.querySelectorAll(".tile")) {
+    const clock = clocks[tile.dataset.id];
+    if (!clock) continue;
+    const now = worldNow(clock);
+    tile.querySelector(".clock").textContent = now.text;
+    const bg = sky(now.minute);
+    tile.querySelectorAll(".sky").forEach((s) => { if (s.style.background !== bg) s.style.background = bg; });
+  }
+  const stale = lastOk && Date.now() - lastOk > POLL_MS * 3;
+  document.querySelectorAll(".tile").forEach((t) => t.classList.toggle("stale", !!stale));
+}
+
+async function pollMonitor() {
+  if (!token) return;
+  const ids = shown === null ? [] : shown;
+  const q = ids.map((id) => `world_id=${encodeURIComponent(id)}`).join("&");
+  try {
+    const data = await api("/monitor" + (q ? `?${q}` : ""));
+    monitor = data.worlds;
+    const at = Date.now();
+    clocks = Object.fromEntries(monitor.map((w) => [w.world_id, { iso: w.server_time, at }]));
+    lastOk = at;
+    renderWall();
+    $("monstatus").textContent = `每 15 秒更新 · 上次 ${new Date().toLocaleTimeString()} · ${monitor.length} 個 World`;
+    $("monstatus").classList.remove("err");
+  } catch (e) {
+    if (e.status === 401) return;
+    $("monstatus").textContent = `更新失敗：${e.message}`;
+    $("monstatus").classList.add("err");
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollMonitor();
+  pollTimer = setInterval(pollMonitor, POLL_MS);
+  tickTimer = setInterval(tick, 1000);
+}
+function stopPolling() { clearInterval(pollTimer); clearInterval(tickTimer); pollTimer = tickTimer = null; }
+
+$("wall").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button[data-act]");
+  const tile = ev.target.closest(".tile");
+  if (!btn || !tile) return;
+  if (btn.dataset.act === "focus") { focusId = focusId === tile.dataset.id ? null : tile.dataset.id; renderWall(); }
+  if (btn.dataset.act === "manage") { setView("manage"); openWorld(tile.dataset.id); }
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && focusId && !document.querySelector("dialog[open]")) { focusId = null; renderWall(); }
+});
+$("cols").value = local.get("worldpane.dashboard.cols") || "";
+const applyCols = () => { const v = $("cols").value; v ? $("wall").dataset.cols = v : delete $("wall").dataset.cols; };
+applyCols();
+$("cols").addEventListener("change", () => { local.set("worldpane.dashboard.cols", $("cols").value || null); applyCols(); });
+$("refresh").addEventListener("click", pollMonitor);
+$("fullscreen").addEventListener("click", () => {
+  const wall = $("wall");
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (wall.requestFullscreen) wall.requestFullscreen().catch(() => toast("瀏覽器不允許全螢幕", true));
+});
+
+/* ---------- manage ---------- */
+let current = null;  // AdminWorld being edited
+
+function renderWorldList() {
+  const host = $("wlist");
+  host.textContent = "";
+  if (!worlds.length) { host.innerHTML = '<p class="note">還沒有 World。</p>'; return; }
+  for (const w of worlds) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("aria-current", String(current?.id === w.id));
+    b.innerHTML = `<strong>${esc(w.name)}</strong><span class="meta">${w.character_count} 角色 · ${w.device_count} 裝置 · ${esc(w.timezone)}</span>`;
+    b.addEventListener("click", () => openWorld(w.id));
+    host.appendChild(b);
+  }
+}
+
+async function openWorld(id) {
+  try {
+    current = await api(`/worlds/${id}`);
+    renderWorldList();
+    renderDetail();
+  } catch (e) { fail(e); }
+}
+
+function profileOptions(selected) {
+  return profiles.map((p) => `<option value="${esc(p.key)}"${p.key === selected ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+}
+
+function renderDetail() {
+  const w = current;
+  const cfg = w.shared_event_config || {};
+  const ov = cfg.overrides || {};
+  const num = (k) => cfg[k] ?? "";
+  $("detail").innerHTML = `
+  <section class="panel">
+    <div class="row" style="justify-content:space-between"><h2>${esc(w.name)}</h2><button class="btn small" type="button" id="d-watch">在監視牆放大</button></div>
+    <form class="row" id="d-name-form">
+      <label class="lbl" for="d-name">名稱</label>
+      <input id="d-name" type="text" maxlength="80" value="${esc(w.name)}" style="flex:1 1 220px" required>
+      <button class="btn primary" type="submit">儲存名稱</button>
+    </form>
+    <dl class="kv">
+      <dt>World ID</dt><dd class="mono">${esc(w.id)}</dd>
+      <dt>時區</dt><dd>${esc(w.timezone)}</dd>
+      <dt>模擬起始日</dt><dd>${esc(w.simulation_start_date)}</dd>
+      <dt>建立時間</dt><dd>${esc(fmtTime(w.created_at))}</dd>
+      <dt>revision</dt><dd class="mono">${w.revision}</dd>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <h2>角色</h2>
+    <div class="scroll-x"><table>
+      <thead><tr><th>名稱</th><th>外觀 key</th><th>順序</th><th>行為 Profile</th><th>狀態</th><th></th></tr></thead>
+      <tbody>${w.characters.map((c) => c.archived_at ? `
+        <tr class="archived"><td>${esc(c.display_name)}</td><td class="mono">${esc(c.appearance)}</td><td>${c.sort_order}</td>
+          <td>${esc(c.profile_name)}</td><td><span class="pill">${esc(fmtTime(c.archived_at))} 封存</span></td><td></td></tr>` : `
+        <tr data-cid="${esc(c.id)}">
+          <td><input type="text" data-f="display_name" maxlength="50" value="${esc(c.display_name)}" aria-label="名稱"></td>
+          <td><input type="text" data-f="appearance" list="looks-list" maxlength="64" value="${esc(c.appearance)}" aria-label="外觀 key"></td>
+          <td><input type="number" data-f="sort_order" min="-1000" max="1000" value="${c.sort_order}" aria-label="順序"></td>
+          <td>${esc(c.profile_name)}</td><td><span class="pill on">啟用</span></td>
+          <td><div class="row" style="flex-wrap:nowrap"><button class="btn small" type="button" data-act="save">儲存</button><button class="btn small danger" type="button" data-act="archive">封存</button></div></td>
+        </tr>`).join("")}</tbody>
+    </table></div>
+    <form class="row" id="d-add-char">
+      <input id="ac-name" type="text" maxlength="50" placeholder="名稱" aria-label="新角色名稱" required style="flex:1 1 120px">
+      <input id="ac-look" type="text" list="looks-list" maxlength="64" placeholder="外觀 key" aria-label="新角色外觀" pattern="[a-z0-9_\\-]{1,64}" required style="flex:1 1 120px">
+      <select id="ac-profile" aria-label="新角色 Profile">${profileOptions("official.freelancer.v1")}</select>
+      <button class="btn primary" type="submit">＋ 新增角色</button>
+    </form>
+    <p class="note">新角色從「還沒產生計畫的日子」開始有行程；今天的計畫若已產生，今天會先顯示發呆。封存的角色保留歷史，之後不再出現在畫面上。</p>
+  </section>
+
+  <section class="panel">
+    <h2>共同事件設定</h2>
+    <form id="d-shared" class="grid-form" style="gap:12px">
+      <div class="grid-form" style="grid-column:1/-1">
+        <label><span class="lbl">每日嘗試次數 attempts</span><input type="number" data-k="attempts" min="0" step="1" value="${esc(num("attempts"))}"></label>
+        <label><span class="lbl">觸發機率 trigger_probability</span><input type="number" data-k="trigger_probability" min="0" max="1" step="0.05" value="${esc(num("trigger_probability"))}"></label>
+        <label><span class="lbl">時段步進（分）slot_step_min</span><input type="number" data-k="slot_step_min" min="1" step="1" value="${esc(num("slot_step_min"))}"></label>
+        <label><span class="lbl">找時段次數 max_slot_tries</span><input type="number" data-k="max_slot_tries" min="0" step="1" value="${esc(num("max_slot_tries"))}"></label>
+      </div>
+      <div class="scroll-x" style="grid-column:1/-1"><table>
+        <thead><tr><th>事件</th><th>啟用</th><th>權重 weight</th><th>預設</th></tr></thead>
+        <tbody>${w.shared_events.map((e) => {
+          const o = ov[e.key] || {};
+          const enabled = o.enabled ?? e.enabled;
+          return `<tr data-ev="${esc(e.key)}"><td>${esc(e.label)} <span class="mono" style="color:var(--muted)">${esc(e.key)}</span></td>
+            <td><input type="checkbox" data-f="enabled"${enabled ? " checked" : ""} aria-label="啟用 ${esc(e.label)}"></td>
+            <td><input type="number" data-f="weight" min="0" step="1" value="${esc(o.weight ?? "")}" placeholder="${esc(e.weight ?? "")}" aria-label="${esc(e.label)} 權重"></td>
+            <td class="mono" style="color:var(--muted)">${e.enabled ? "啟用" : "停用"} / ${esc(e.weight ?? "—")}</td></tr>`;
+        }).join("")}</tbody>
+      </table></div>
+      <div class="row" style="grid-column:1/-1"><button class="btn primary" type="submit">儲存設定</button>
+        <span class="note">只影響之後才產生的日子；已產生的計畫不會改寫。權重留空 = 用預設值。</span></div>
+    </form>
+    <details>
+      <summary>進階：直接編輯 shared_event_config JSON</summary>
+      <form id="d-json" style="display:grid;gap:8px;margin-top:8px">
+        <textarea id="d-json-text" spellcheck="false" aria-label="shared_event_config JSON">${esc(JSON.stringify(cfg, null, 2))}</textarea>
+        <div class="row"><button class="btn primary" type="submit">儲存 JSON</button>
+          <span class="note">可用欄位：attempts、trigger_probability、slot_step_min、max_slot_tries、overrides.&lt;事件 key&gt;（weight、enabled、min_duration、allowed_time、cooldown_min…）。</span></div>
+      </form>
+    </details>
+  </section>
+
+  <section class="panel">
+    <h2>裝置與配對</h2>
+    <div class="scroll-x"><table>
+      <thead><tr><th>裝置 ID</th><th>韌體</th><th>配對時間</th><th>最後連線</th></tr></thead>
+      <tbody>${w.devices.length ? w.devices.map((d) => `<tr><td class="mono">${esc(d.id.slice(0, 8))}…</td><td>${esc(d.firmware_version || "—")}</td>
+        <td>${esc(fmtTime(d.created_at))}</td><td>${esc(fmtTime(d.last_seen_at))}</td></tr>`).join("")
+        : '<tr><td colspan="4" class="note">還沒有裝置連上這個 World。</td></tr>'}</tbody>
+    </table></div>
+    <form class="row" id="d-pair">
+      <label class="lbl" for="d-uses">可用次數</label>
+      <input id="d-uses" type="number" min="1" max="20" value="1" style="width:76px">
+      <button class="btn primary" type="submit">發一組配對碼</button>
+      <span class="code" id="d-code" style="font-size:1.5rem"></span><span class="status" id="d-code-exp"></span>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between">
+      <h2>時間軸</h2>
+      <div class="row"><label class="lbl" for="d-date">日期</label><input id="d-date" type="date" value="${todayIn(w.timezone)}" max="${todayIn(w.timezone)}" min="${esc(w.simulation_start_date)}"></div>
+    </div>
+    <div class="scroll-x"><div class="tl-inner" id="d-timeline"></div></div>
+    <p class="note">只列出已經開始的事件（今天之後的計畫不公開）。白框 = 共同事件，淡色細條 = 上課 / 上班背景行程。</p>
+  </section>`;
+
+  $("d-watch").addEventListener("click", () => { focusId = w.id; if (!isShown(w.id)) setShown([...(shown || []), w.id]); setView("monitor"); });
+  $("d-name-form").addEventListener("submit", (ev) => { ev.preventDefault(); patchWorld({ name: $("d-name").value }, "已更新名稱"); });
+  $("d-add-char").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      current = await api(`/worlds/${w.id}/characters`, { method: "POST", body: {
+        display_name: $("ac-name").value, appearance: $("ac-look").value.trim(), profile_key: $("ac-profile").value } });
+      toast("已新增角色");
+      renderDetail(); loadWorlds(); pollMonitor();
+    } catch (e) { fail(e); }
+  });
+  $("detail").querySelectorAll("tr[data-cid] button").forEach((btn) => btn.addEventListener("click", async () => {
+    const tr = btn.closest("tr");
+    const cid = tr.dataset.cid;
+    try {
+      if (btn.dataset.act === "archive") {
+        const name = tr.querySelector('[data-f="display_name"]').value;
+        if (!confirm(`封存「${name}」？之後不會再有新行程（歷史保留，無法從這裡復原）。`)) return;
+        current = await api(`/worlds/${w.id}/characters/${cid}`, { method: "DELETE" });
+        toast("已封存");
+      } else {
+        const body = {};
+        tr.querySelectorAll("[data-f]").forEach((el) => { body[el.dataset.f] = el.type === "number" ? Number(el.value) : el.value.trim(); });
+        current = await api(`/worlds/${w.id}/characters/${cid}`, { method: "PATCH", body });
+        toast("已儲存角色");
+      }
+      renderDetail(); loadWorlds(); pollMonitor();
+    } catch (e) { fail(e); }
+  }));
+  $("d-shared").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const next = JSON.parse(JSON.stringify(cfg));
+    $("d-shared").querySelectorAll("[data-k]").forEach((el) => {
+      if (el.value.trim() === "") delete next[el.dataset.k]; else next[el.dataset.k] = Number(el.value);
+    });
+    const overrides = Object.assign({}, next.overrides || {});
+    for (const e of w.shared_events) {
+      const tr = $("d-shared").querySelector(`tr[data-ev="${CSS.escape(e.key)}"]`);
+      const o = Object.assign({}, overrides[e.key] || {});
+      const enabled = tr.querySelector('[data-f="enabled"]').checked;
+      if (enabled === e.enabled) delete o.enabled; else o.enabled = enabled;
+      const wv = tr.querySelector('[data-f="weight"]').value.trim();
+      if (wv === "" || Number(wv) === e.weight) delete o.weight; else o.weight = Number(wv);
+      if (Object.keys(o).length) overrides[e.key] = o; else delete overrides[e.key];
+    }
+    next.overrides = overrides;
+    patchWorld({ shared_event_config: next }, "已儲存共同事件設定");
+  });
+  $("d-json").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    let parsed;
+    try { parsed = JSON.parse($("d-json-text").value); } catch (e) { toast(`JSON 格式錯誤：${e.message}`, true); return; }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) { toast("shared_event_config 必須是 JSON 物件", true); return; }
+    patchWorld({ shared_event_config: parsed }, "已儲存 JSON");
+  });
+  $("d-pair").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      const p = await api(`/worlds/${w.id}/pairing-codes`, { method: "POST", body: { max_uses: Number($("d-uses").value) || 1 } });
+      $("d-code").textContent = p.pairing_code;
+      $("d-code-exp").textContent = `${fmtTime(p.expires_at)} 前有效 · 可用 ${p.max_uses} 次`;
+    } catch (e) { fail(e); }
+  });
+  $("d-date").addEventListener("change", () => loadTimeline(w.id, $("d-date").value));
+  loadTimeline(w.id, $("d-date").value);
+}
+
+async function patchWorld(body, okText) {
+  try {
+    current = await api(`/worlds/${current.id}`, { method: "PATCH", body });
+    toast(okText);
+    renderDetail(); loadWorlds(); pollMonitor();
+  } catch (e) { fail(e); }
+}
+
+const minOfIso = (iso, date) => {
+  const d = iso.slice(0, 10);
+  return d < date ? 0 : d > date ? 1440 : Number(iso.slice(11, 13)) * 60 + Number(iso.slice(14, 16));
+};
+
+async function loadTimeline(worldId, date) {
+  const host = $("d-timeline");
+  if (!host || !date) return;
+  try {
+    const h = await api(`/worlds/${worldId}/history?date=${date}`);
+    if (current?.id !== worldId || $("d-date")?.value !== date) return;
+    host.textContent = "";
+    for (const c of h.characters) {
+      const bars = c.events.map((e) => ({ start: minOfIso(e.started_at, date), end: minOfIso(e.ends_at, date), scene: e.scene,
+        label: actOf(e.activity)[0], shared: e.participants.length > 1, base: e.type === "school" || e.type === "work" }))
+        .sort((a, b) => (b.base - a.base) || (b.end - b.start) - (a.end - a.start));
+      const lane = document.createElement("div");
+      lane.className = "lane";
+      lane.innerHTML = `<div class="name" title="${esc(c.display_name)}">${esc(c.display_name)}</div><div class="track">${bars.map((b) =>
+        `<div class="bar${b.base ? " base" : ""}${b.shared ? " shared" : ""}" style="left:${b.start / 1440 * 100}%;width:${Math.max(0.25, (Math.min(b.end, 1440) - b.start) / 1440 * 100)}%;--k:var(--${sceneOf(b.scene)[1]})" title="${hhmm(b.start)}–${hhmm(b.end)} ${esc(b.label)}（${esc(sceneOf(b.scene)[0])}）">${esc(b.label)}</div>`).join("")}</div>`;
+      host.appendChild(lane);
+    }
+    const axis = document.createElement("div");
+    axis.className = "axis";
+    axis.innerHTML = `<div></div><div class="ticks">${[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hr) =>
+      `<span style="left:${hr / 24 * 100}%;${hr === 0 ? "transform:none" : hr === 24 ? "transform:translateX(-100%)" : ""}">${pad(hr)}</span>`).join("")}</div>`;
+    host.appendChild(axis);
+    if (!h.characters.some((c) => c.events.length)) host.insertAdjacentHTML("afterbegin", '<p class="note">這天還沒有已開始的事件。</p>');
+  } catch (e) { host.innerHTML = `<p class="note err">${esc(e.message)}</p>`; }
+}
+
+/* ---------- create dialog ---------- */
+function charRow(c) {
+  const row = document.createElement("div");
+  row.className = "crow";
+  row.innerHTML = `<input type="text" data-f="display_name" maxlength="50" placeholder="名稱" value="${esc(c.display_name)}" aria-label="名稱" required>
+    <input type="text" data-f="appearance" list="looks-list" maxlength="64" placeholder="外觀 key" value="${esc(c.appearance)}" aria-label="外觀 key" pattern="[a-z0-9_\\-]{1,64}" required>
+    <select data-f="profile_key" aria-label="Profile">${profileOptions(c.profile_key)}</select>
+    <button class="btn small danger" type="button" aria-label="移除角色">✕</button>`;
+  row.querySelector("button").addEventListener("click", () => { if ($("cw-chars").children.length > 1) row.remove(); });
+  return row;
+}
+
+function openCreate() {
+  $("create-form").hidden = false;
+  $("create-result").hidden = true;
+  $("cw-err").textContent = "";
+  $("cw-chars").textContent = "";
+  $("cw-chars").append(
+    charRow({ display_name: "小白", appearance: "xiaobai", profile_key: "official.student.v1" }),
+    charRow({ display_name: "小雞毛", appearance: "xiaojimao", profile_key: "official.office_worker.v1" }));
+  $("create-dialog").showModal();
+}
+
+let created = null;
+$("new-world").addEventListener("click", openCreate);
+$("cw-cancel").addEventListener("click", () => $("create-dialog").close());
+$("cw-add").addEventListener("click", () => {
+  if ($("cw-chars").children.length >= 12) return;
+  $("cw-chars").append(charRow({ display_name: "", appearance: "", profile_key: "official.freelancer.v1" }));
+});
+$("create-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const characters = [...$("cw-chars").children].map((row) => Object.fromEntries(
+    [...row.querySelectorAll("[data-f]")].map((el) => [el.dataset.f, el.value.trim()])));
+  $("cw-submit").disabled = true;
+  try {
+    const out = await api("/worlds", { method: "POST", body: {
+      name: $("cw-name").value, timezone: $("cw-tz").value.trim() || null,
+      pairing_max_uses: Number($("cw-uses").value) || 1, characters } });
+    created = out.world;
+    $("cr-code").textContent = out.pairing.pairing_code;
+    $("cr-exp").textContent = `${fmtTime(out.pairing.expires_at)} 前有效 · 可用 ${out.pairing.max_uses} 次`;
+    $("create-form").hidden = true;
+    $("create-result").hidden = false;
+    await loadWorlds();
+    pollMonitor();
+  } catch (e) { $("cw-err").textContent = e.message; }
+  finally { $("cw-submit").disabled = false; }
+});
+$("cr-close").addEventListener("click", () => $("create-dialog").close());
+$("cr-open").addEventListener("click", () => { $("create-dialog").close(); setView("manage"); openWorld(created.id); });
+
+/* ---------- views ---------- */
+function setView(view) {
+  local.set("worldpane.dashboard.view", view);
+  $("tab-monitor").setAttribute("aria-pressed", String(view === "monitor"));
+  $("tab-manage").setAttribute("aria-pressed", String(view === "manage"));
+  $("monitor").hidden = view !== "monitor";
+  $("manage").hidden = view !== "manage";
+  if (view === "monitor") renderWall();
+}
+$("tab-monitor").addEventListener("click", () => setView("monitor"));
+$("tab-manage").addEventListener("click", () => setView("manage"));
+
+async function start() {
+  $("gate").hidden = true;
+  $("topbar").hidden = false;
+  try {
+    [profiles] = await Promise.all([api("/profiles"), loadWorlds()]);
+  } catch (e) { if (e.status !== 401) fail(e); return; }
+  if (shown) {
+    shown = shown.filter((id) => worlds.some((w) => w.id === id));
+    if (!shown.length) shown = null;
+    local.set("worldpane.dashboard.shown", shown ? JSON.stringify(shown) : null);
+    renderChips();
+  }
+  setView(local.get("worldpane.dashboard.view") === "manage" ? "manage" : "monitor");
+  startPolling();
+}
+
+if (token) start(); else showGate();
+</script>
+</body>
+</html>
