@@ -51,6 +51,12 @@ def test_pages_inline_the_theme_once(name):
     assert offbeat_css() in page
 
 
+def test_aurora_red_is_never_text():
+    # #BF616A on the polar1 panel is 2.46:1; error messages and danger buttons must stay readable.
+    for name, source in [("offbeat.css", offbeat_css())] + [(p, _static(p)) for p in PAGES]:
+        assert not re.search(r"(?<![-\w])color:\s*var\(--danger\)", source), name
+
+
 def test_offbeat_colors_come_from_the_nord_palette():
     css = offbeat_css()
     hexes = {h.upper() for h in HEX.findall(css)}

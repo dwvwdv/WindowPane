@@ -105,7 +105,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .note { font-size: .84rem; color: var(--muted); margin: 0; max-width: 75ch; }
 .status { font-family: var(--font-mono); font-size: .76rem; color: var(--muted); }
 .mono { font-family: var(--font-mono); font-size: .8rem; font-variant-numeric: tabular-nums; }
-.err { color: var(--danger); }
+/* Aurora red on polar1 is only 2.46:1, so red is never text color: the message is snow, red is the bar. */
+.err { color: var(--ink-strong); border-left: 3px solid var(--danger); padding-left: 8px; }
 label.lbl, .lbl { font-size: .82rem; font-weight: 500; color: var(--muted); }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .empty { color: var(--muted); text-align: center; padding: 40px 16px; border: 2px dashed var(--line); border-radius: var(--radius); }
@@ -123,8 +124,8 @@ label.lbl, .lbl { font-size: .82rem; font-weight: 500; color: var(--muted); }
 .btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow-ghost); }
 .btn.primary { background: var(--primary); color: var(--ink-bright); border-color: var(--primary-edge); box-shadow: 3px 3px 0 var(--shadow-solid); letter-spacing: .04em; }
 .btn.primary:active:not(:disabled) { box-shadow: 1px 1px 0 var(--shadow-solid); }
-.btn.danger { color: var(--danger); box-shadow: 3px 3px 0 var(--shadow-danger); }
-.btn.danger:hover { border-color: var(--danger); }
+.btn.danger { border-color: var(--danger); box-shadow: 3px 3px 0 var(--shadow-danger); }
+.btn.danger:hover { border-color: var(--danger); background: var(--panel-head); }
 .btn.small { padding: 1px 8px; font-size: .8rem; box-shadow: 2px 2px 0 var(--shadow-ghost); }
 .btn.small.danger { box-shadow: 2px 2px 0 var(--shadow-danger); }
 .btn:disabled { opacity: .5; cursor: default; }

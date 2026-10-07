@@ -51,7 +51,8 @@ JS 需要顏色時也一樣：字串寫成 `var(--look-xiaobai)`、`var(--home)`
 | 成功／警告／危險／資訊／注意 | `--ok`／`--warn`／`--danger`／`--info`／`--notice` | Aurora green／orange／red、frost2、Aurora yellow |
 
 - **次要文字用 dim `#9AA0AD`，絕不用 polar3** ⚠️：polar3 疊在 polar0／polar1 上對比只有 2.3:1（未達 WCAG AA 4.5:1），只適合邊框與分隔線
-- **Aurora 只作語意點綴，不作大面積背景**：危險按鈕是一般按鈕＋紅字＋紅色偏移塊，不是整顆紅底；狀態用 `.pill` 的字與邊框表現
+- **Aurora 只作語意點綴，不作大面積背景**：危險按鈕是一般按鈕＋紅色邊框＋紅色偏移塊，不是整顆紅底；狀態用 `.pill` 的字與邊框表現
+- **Aurora red 不當文字色** ⚠️：`#BF616A` 疊在 polar1 只有 2.46:1、polar2 只有 2.11:1（WCAG AA 要 4.5:1），最需要被讀懂的錯誤訊息反而最難讀。危險與錯誤一律是 snow 文字＋紅色的邊框、左側 bar 或偏移塊（`.err`、`.btn.danger`、`.toast.err`）。其他 Aurora 色當字前也先算對比：green／yellow 疊在 polar1 夠（4.9／6.4:1），orange／purple 只有約 3.5:1，只適合大字或非文字標記
 - 不用純白背景、不用純白文字（最亮是 snow2）
 - **陰影一律是 Nord 色的實色塊（無模糊）**，不用 `rgba(0,0,0,…)` 灰色陰影；dialog 背後的遮罩也是半透明 polar0（`--scrim`）
 - 同一個畫面最多兩個強調色同時出現（frost 系 + 一個 Aurora 語意色）
