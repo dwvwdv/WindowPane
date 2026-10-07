@@ -3,7 +3,7 @@
   "info": {
     "title": "WorldPane API",
     "description": "WorldPane (窗間) backend. Devices poll `GET /api/v1/world/state` (~15 s) with `If-None-Match`; the Backend is the single source of truth for World state.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "paths": {
     "/api/v1/world/state": {

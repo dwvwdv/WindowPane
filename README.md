@@ -15,6 +15,9 @@ ESP32 裝置 ──HTTPS polling──▶ worldpane-server（FastAPI）──▶
 | [`worldpane-server/`](./worldpane-server) | Backend API：建立 World、裝置配對、`/world/state`、`/world/history`、瀏覽器 Demo | [README](./worldpane-server/README.md) |
 | [`supabase/`](./supabase) | DB schema（migrations）、事件目錄、seed | [README](./supabase/README.md) |
 | [`docker-compose.yml`](./docker-compose.yml) | 一鍵部署（預設接 Supabase；`--profile local-db` 改用本機 Postgres） | 見 server README |
+| [`docs/`](./docs) | 架構與跨 package 契約、網頁外觀（Offbeat）、版本歷史 | [architecture](./docs/architecture.md)、[ui-conventions](./docs/ui-conventions.md)、[changelog](./docs/changelog.md) |
+
+開發規範、「改 X 前先讀 Y」對照表與 Code Review 原則在 [`AGENTS.md`](./AGENTS.md)（Claude Code 與 Codex 共用；`CLAUDE.md` 只匯入它）。
 
 ## 快速開始
 
@@ -69,6 +72,7 @@ device registration、World pairing、revision / ETag），以及 Docker 部署�
 | Workflow | 觸發 | 內容 |
 |---|---|---|
 | [`core.yml`](./.github/workflows/core.yml) | `worldpane-core/**`、`supabase/seed.sql` | Python 3.12 / 3.13 / 3.14 跑 core 測試；檢查 `seed.sql` 與 core 預設一致 |
+| [`docs.yml`](./.github/workflows/docs.yml) | 每個 PR / push | 文件一致性：`AGENTS.md` 大小、文件提到的路徑存在、版號一致且有 changelog 條目 |
 | [`server.yml`](./.github/workflows/server.yml) | `worldpane-server/**`、`worldpane-core/**`、`supabase/**`、`docker/**`、`docker-compose.yml` | server 測試（Python 3.14）同時跑 in-memory 與 Postgres 15（與 Supabase 專案相同）（用 `docker/db/init-worldpane.sh` 套 migrations）；檢查 `openapi.json`；build image 後用 `docker compose --profile local-db` 冒煙測試；push 到 `master` 時發布 `ghcr.io/dwvwdv/worldpane-server:latest` 與 `:sha-<commit>` |
 
 PR 只跑測試和 build，不會 push image。
@@ -78,5 +82,6 @@ PR 只跑測試和 build，不會 push image。
 ```bash
 (cd worldpane-core && python3 -m pytest)
 (cd worldpane-server && python3 -m pip install -e ../worldpane-core -e ".[dev]" && python3 -m pytest)
+python3 -m pytest tests          # 文件一致性守衛（repo 根目錄，只需要 pytest）
 # Postgres 測試：WORLDPANE_TEST_DATABASE_URL=postgresql://... python3 -m pytest（必須是可丟棄的 DB）
 ```

@@ -26,6 +26,7 @@ from .seed import (
 )
 from .services import WorldService
 from .simulation.core import CoreSimulationProvider, _to_core_event
+from .theme import with_offbeat
 
 
 def _minutes(dt: datetime, day_start: datetime) -> int:
@@ -90,7 +91,7 @@ def page_fragment(payload: dict | None) -> str:
     """The demo page body (no doctype/head), with ``payload`` embedded for offline playback."""
     template = resources.files("worldpane_server").joinpath("static/demo.html").read_text(encoding="utf-8")
     data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    return template.replace("/*__DEMO_DATA__*/null", data, 1)
+    return with_offbeat(template).replace("/*__DEMO_DATA__*/null", data, 1)
 
 
 def page_document(payload: dict | None) -> str:
