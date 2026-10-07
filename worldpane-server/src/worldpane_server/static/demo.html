@@ -1,84 +1,48 @@
 <title>窗間 Demo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
 <style>
-/* Layout: one "device" bezel holding a window per character, transport + 24h timeline below. */
-:root {
-  --bg: #eef0f3;
-  --panel: #ffffff;
-  --ink: #1d2433;
-  --muted: #5f6878;
-  --line: #d5d9e1;
-  --accent: #3d5a98;
-  --bezel: #2a2f3a;
-  --home: #e8a46a;
-  --school: #6aa57a;
-  --office: #6f8fb8;
-  --out: #c97b8f;
-  --idle: #b9bfca;
-  --font-display: "LXGW WenKai TC", "Kaiti TC", "STKaiti", serif;
-  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #141821; --panel: #1c2230; --ink: #e6e9ef; --muted: #9aa3b4; --line: #2e3647;
-    --accent: #8fa9e0; --bezel: #0b0e14; --idle: #4a5263; color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #141821; --panel: #1c2230; --ink: #e6e9ef; --muted: #9aa3b4; --line: #2e3647;
-  --accent: #8fa9e0; --bezel: #0b0e14; --idle: #4a5263; color-scheme: dark;
-}
-[hidden] { display: none !important; }
-body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
-.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 18px; }
+/*__OFFBEAT_CSS__*/
+/* Demo 專屬版面：一個裝置外框、每個角色一扇窗，下方是播放控制與 24 小時時間軸。
+   顏色只用 offbeat.css 的語意 token（docs/ui-conventions.md）。 */
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 20px; }
 header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
-h1 { font-family: var(--font-display); font-size: 1.9rem; margin: 0; letter-spacing: .02em; text-wrap: balance; }
-h1 small { font-family: var(--font-body); font-size: .85rem; color: var(--muted); font-weight: 400; margin-left: .6em; letter-spacing: 0; }
-.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.tabs button { border: 0; background: transparent; color: var(--muted); padding: 6px 14px; font: inherit; cursor: pointer; }
-.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap > section { margin-right: var(--offset); }
 
 /* Device */
-.device { background: var(--bezel); border-radius: 18px; padding: 14px; box-shadow: 0 10px 30px rgb(0 0 0 / .18); }
+.device { background: var(--bezel); border: 2px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--offset) var(--offset) 0 var(--shadow); }
 .screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.win { position: relative; border-radius: 10px; overflow: hidden; height: 250px; color: #fff; }
-.sky { position: absolute; inset: 0; transition: background 1.2s ease; }
-.room { position: absolute; left: 0; right: 0; bottom: 0; height: 58%; transition: background .6s ease; }
-.room::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: rgb(0 0 0 / .18); }
+.win { position: relative; border-radius: 2px; overflow: hidden; height: 250px; color: var(--screen-ink); }
+.sky { position: absolute; inset: 0; }
+.room { position: absolute; left: 0; right: 0; bottom: 0; height: 58%; background: var(--k); transition: background .6s ease; }
+.room::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--screen-floor-edge); }
 .figure { position: absolute; left: calc(50% - 37px); bottom: 104px; width: 74px; height: 92px; }
-.figure .head { position: absolute; left: 50%; top: 0; width: 46px; height: 46px; transform: translateX(-50%); border-radius: 50%; background: var(--c); box-shadow: inset -4px -5px 0 rgb(0 0 0 / .12); }
-.figure .body { position: absolute; left: 50%; bottom: 0; width: 64px; height: 50px; transform: translateX(-50%); border-radius: 30px 30px 10px 10px; background: var(--c); box-shadow: inset -5px -6px 0 rgb(0 0 0 / .12); }
-.figure .eye { position: absolute; top: 19px; width: 5px; height: 6px; border-radius: 3px; background: #2a2f3a; }
+.figure .head { position: absolute; left: 50%; top: 0; width: 46px; height: 46px; transform: translateX(-50%); border-radius: 50%; background: var(--c); box-shadow: inset -4px -5px 0 var(--screen-shade); }
+.figure .body { position: absolute; left: 50%; bottom: 0; width: 64px; height: 50px; transform: translateX(-50%); border-radius: 30px 30px 10px 10px; background: var(--c); box-shadow: inset -5px -6px 0 var(--screen-shade); }
+.figure .eye { position: absolute; top: 19px; width: 5px; height: 6px; border-radius: 3px; background: var(--screen-eye); }
 .figure .eye.l { left: 26px; } .figure .eye.r { left: 42px; }
 .figure.sleep .eye { height: 2px; top: 22px; }
-.act-icon { position: absolute; right: -14px; top: -8px; font-size: 26px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .3)); }
+.act-icon { position: absolute; right: -14px; top: -8px; font-size: 26px; }
 @media (prefers-reduced-motion: no-preference) { .figure { animation: breathe 3.4s ease-in-out infinite; } }
 @keyframes breathe { 50% { transform: translateY(-2px); } }
-.cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px; background: rgb(10 14 22 / .55); display: grid; gap: 2px; }
+.cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px; background: var(--screen-cap); display: grid; gap: 2px; }
 .cap .who { display: flex; justify-content: space-between; gap: 8px; font-size: .8rem; opacity: .85; }
-.cap .what { font-family: var(--font-display); font-size: 1.35rem; line-height: 1.25; }
+.cap .what { font-size: 1.35rem; font-weight: 700; line-height: 1.25; }
 .cap .when { font-family: var(--font-mono); font-size: .78rem; opacity: .8; font-variant-numeric: tabular-nums; }
-.badge { display: inline-block; padding: 0 7px; border-radius: 99px; background: rgb(255 255 255 / .22); font-size: .72rem; margin-left: 6px; vertical-align: 2px; }
-.devfoot { display: flex; justify-content: space-between; color: #8c95a6; font-family: var(--font-mono); font-size: .75rem; padding: 8px 4px 0; gap: 8px; flex-wrap: wrap; }
+.badge { display: inline-block; padding: 0 7px; border-radius: 2px; background: var(--screen-badge); font-size: .72rem; margin-left: 6px; vertical-align: 2px; }
+.devfoot { display: flex; justify-content: space-between; color: var(--muted); font-family: var(--font-mono); font-size: .75rem; padding: 8px 4px 0; gap: 8px; flex-wrap: wrap; }
 
 /* Controls */
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 12px; }
 .clock { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
-.clock .t { font-family: var(--font-mono); font-size: 2.2rem; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.clock .t { font-family: var(--font-mono); font-size: 2.2rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .clock .d { color: var(--muted); }
-.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .days { display: flex; flex-wrap: wrap; gap: 6px; }
-.days button, .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: .88rem; cursor: pointer; }
-.days button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.days button { border: 2px solid var(--line); background: var(--panel); color: var(--ink); border-radius: var(--radius); padding: 3px 10px; font: inherit; font-size: .88rem; cursor: pointer; }
+.days button:hover { border-color: var(--accent); }
+.days button[aria-pressed="true"] { border-color: var(--accent); background: var(--panel-head); color: var(--accent); font-weight: 700; }
 .days button .wk { color: var(--muted); font-size: .78rem; margin-left: 4px; }
-.btn.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
-select, input[type="text"] { font: inherit; font-size: .9rem; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
-input[type="range"] { flex: 1 1 260px; accent-color: var(--accent); }
-label.lbl { font-size: .85rem; color: var(--muted); }
+input[type="range"] { flex: 1 1 260px; }
 
 /* Timeline */
 .tl { display: grid; gap: 8px; }
@@ -86,19 +50,15 @@ label.lbl { font-size: .85rem; color: var(--muted); }
 .tl-inner { min-width: 620px; display: grid; gap: 6px; position: relative; }
 .lane { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; }
 .lane .name { font-size: .85rem; color: var(--muted); text-align: right; }
-.track { position: relative; height: 30px; background: repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--line) calc(12.5% - 1px) 12.5%); border-radius: 6px; cursor: pointer; }
-.bar { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; background: var(--k); opacity: .9; overflow: hidden; white-space: nowrap; font-size: .7rem; color: #fff; padding: 0 3px; line-height: 24px; }
+.track { position: relative; height: 30px; background: repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--line) calc(12.5% - 1px) 12.5%); border: 1px solid var(--line); cursor: pointer; }
+.bar { position: absolute; top: 3px; bottom: 3px; background: var(--k); overflow: hidden; white-space: nowrap; font-size: .7rem; font-weight: 600; color: var(--bg); padding: 0 3px; line-height: 22px; }
 .bar.base { top: 9px; bottom: 9px; opacity: .45; font-size: 0; }
-.bar.shared { box-shadow: inset 0 0 0 2px rgb(255 255 255 / .85); }
+.bar.shared { box-shadow: inset 0 0 0 2px var(--ink-bright); }
 .axis { display: grid; grid-template-columns: 64px 1fr; gap: 8px; }
 .axis .ticks { position: relative; height: 16px; font-family: var(--font-mono); font-size: .7rem; color: var(--muted); }
 .axis .ticks span { position: absolute; transform: translateX(-50%); }
-.playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--accent); pointer-events: none; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .8rem; color: var(--muted); }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
-.note { font-size: .85rem; color: var(--muted); margin: 0; max-width: 70ch; }
-.status { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); }
-.err { color: #c0392b; }
+.playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--notice); pointer-events: none; }
+.note { max-width: 70ch; }
 </style>
 
 <div class="wrap">
@@ -172,9 +132,9 @@ const ACTS = {
   sleeping: ["睡覺", "💤"], working: ["工作", "💻"], idle: ["發呆", "☁️"], dining_out: ["外食", "🍜"],
   shopping: ["逛街", "🛍️"], watch_movie: ["看電影", "🎬"], basketball: ["打球", "🏀"],
 };
-const ROOM = { home: "#c9895a", school: "#5d8f6b", office: "#5b7799", out: "#a86478", idle: "#7d8494" };
-const LOOKS = { xiaobai: "#f4f1ea", xiaojimao: "#f2c94c" };
-const FALLBACK_LOOKS = ["#9ad0c2", "#f0a6ca", "#b8c0ff", "#ffd6a5"];
+// Colors are Offbeat tokens (inlined offbeat.css); the page never writes a color itself.
+const LOOKS = { xiaobai: "var(--look-xiaobai)", xiaojimao: "var(--look-xiaojimao)" };
+const FALLBACK_LOOKS = [1, 2, 3, 4].map((i) => `var(--look-${i})`);
 const WEEK = ["", "一", "二", "三", "四", "五", "六", "日"];
 
 const $ = (id) => document.getElementById(id);
@@ -189,13 +149,14 @@ const store = {
   set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
 };
 
+// Time-of-day phase; offbeat.css maps .sky[data-sky] to its gradient.
 function sky(min) {
   const h = min / 60;
-  if (h < 5 || h >= 20.5) return "linear-gradient(#0f1733, #26315a)";
-  if (h < 7) return "linear-gradient(#3b4a7a, #f0a37a)";
-  if (h < 16.5) return "linear-gradient(#7fb3e6, #cfe6f7)";
-  if (h < 18.5) return "linear-gradient(#5b6aa8, #f3a65f)";
-  return "linear-gradient(#232c55, #7d5b8c)";
+  if (h < 5 || h >= 20.5) return "night";
+  if (h < 7) return "dawn";
+  if (h < 16.5) return "day";
+  if (h < 18.5) return "dusk";
+  return "evening";
 }
 
 /* ---------- rendering shared by both modes ---------- */
@@ -209,8 +170,8 @@ function renderScreens(chars, states, min) {
     const win = document.createElement("article");
     win.className = "win";
     win.innerHTML = `
-      <div class="sky" style="background:${sky(min)}"></div>
-      <div class="room" style="background:${st.activity === "idle" ? ROOM.idle : ROOM[cat]}"></div>
+      <div class="sky" data-sky="${sky(min)}"></div>
+      <div class="room" style="--k:var(--${st.activity === "idle" ? "idle" : cat})"></div>
       <div class="figure ${st.activity === "sleeping" ? "sleep" : ""}" style="--c:${lookOf(c, i)}">
         <div class="body"></div><div class="head"></div><div class="eye l"></div><div class="eye r"></div>
         <span class="act-icon" aria-hidden="true">${icon}</span>

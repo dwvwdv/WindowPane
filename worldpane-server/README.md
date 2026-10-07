@@ -208,6 +208,9 @@ src/worldpane_server/
 ├─ api/admin_routes.py  /api/v1/admin（Dashboard 用）
 ├─ admin.py             AdminService：列出 / 建立 / 調整 World、監視牆
 ├─ static/dashboard.html  /dashboard 單頁介面
+├─ static/demo.html       /demo 瀏覽器 Demo
+├─ static/offbeat.css     Offbeat 設計語言：網頁顏色的唯一來源（docs/ui-conventions.md）
+├─ theme.py               把 offbeat.css 內嵌進頁面
 ├─ api/deps.py          Bearer device auth / admin auth（Supabase session 或 admin token）
 ├─ supabase_auth.py     向 Supabase Auth 驗證 access token（含短期快取）
 ├─ services.py          WorldService：編排 repo + simulation，ETag/revision、pairing

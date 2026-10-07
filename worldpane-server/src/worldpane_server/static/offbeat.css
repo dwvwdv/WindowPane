@@ -1,0 +1,169 @@
+/* Offbeat — lazyrhythm 的設計語言（Nord × Brutalism），WorldPane 網頁（/dashboard、/demo）共用。
+   這個檔案是網頁顏色的唯一來源：Nord 色碼只寫在這裡，頁面只用下方的語意 token。
+   伺服器把本檔內嵌到頁面 <style> 裡的 OFFBEAT_CSS 佔位註解（worldpane_server/theme.py）。
+   規範與理由見 docs/ui-conventions.md。 */
+:root {
+  /* ── Nord 色票（只在本檔出現）──────────────────────────── */
+  --nord-polar0: #2E3440; /* 主背景（永遠最深，不用純黑） */
+  --nord-polar1: #3B4252; /* 卡片／面板 */
+  --nord-polar2: #434C5E; /* 標題欄／hover */
+  --nord-polar3: #4C566A; /* 邊框／分隔線（勿作文字色，對比只有 2.3:1） */
+  --nord-dim: #9AA0AD;    /* 輔助文字（取代 polar3 作文字） */
+  --nord-snow0: #D8DEE9;  /* 主要文字 */
+  --nord-snow1: #E5E9F0;  /* 標題 */
+  --nord-snow2: #ECEFF4;  /* 最亮強調 */
+  --nord-frost0: #8FBCBB; /* 次要操作／按鈕裸邊 */
+  --nord-frost1: #88C0D0; /* 主要強調／連結／focus */
+  --nord-frost2: #81A1C1; /* 資訊／按鈕偏移塊 */
+  --nord-frost3: #5E81AC; /* 主要按鈕底／偏移陰影 */
+  --nord-red: #BF616A;    /* Aurora：危險 */
+  --nord-orange: #D08770; /* Aurora：警告 */
+  --nord-yellow: #EBCB8B; /* Aurora：注意 */
+  --nord-green: #A3BE8C;  /* Aurora：成功 */
+  --nord-purple: #B48EAD; /* Aurora：特殊標記 */
+
+  /* ── 語意 token（頁面只用這些）────────────────────────── */
+  --bg: var(--nord-polar0);
+  --panel: var(--nord-polar1);
+  --panel-head: var(--nord-polar2);
+  --field: var(--nord-polar0);       /* 面板裡的輸入框：比面板深一階才分得出來 */
+  --line: var(--nord-polar3);
+  --ink: var(--nord-snow0);
+  --ink-strong: var(--nord-snow1);
+  --ink-bright: var(--nord-snow2);
+  --muted: var(--nord-dim);
+  --accent: var(--nord-frost1);
+  --primary: var(--nord-frost3);
+  --primary-edge: var(--nord-frost0);
+  --ok: var(--nord-green);
+  --warn: var(--nord-orange);
+  --danger: var(--nord-red);
+  --info: var(--nord-frost2);
+  --notice: var(--nord-yellow);
+
+  /* Brutalism 結構：偏移陰影（無模糊的色塊）、2px 裸邊框、低圓角 */
+  --offset: 4px;
+  --radius: 4px;
+  --shadow: rgb(94 129 172 / .5);       /* frost3 @ 50%：卡片、面板 */
+  --shadow-solid: var(--nord-frost2);   /* 主要按鈕 */
+  --shadow-ghost: var(--nord-polar2);   /* 一般按鈕 */
+  --shadow-danger: rgb(191 97 106 / .4);
+  --scrim: rgb(46 52 64 / .75);         /* dialog 背後的遮罩（polar0，不用黑） */
+
+  /* 場景類別：時間軸色條、圖例、裝置畫面的地板 */
+  --home: var(--nord-orange);
+  --school: var(--nord-green);
+  --office: var(--nord-frost2);
+  --out: var(--nord-purple);
+  --idle: var(--nord-polar3);
+
+  /* 裝置畫面（模擬 ESP32 螢幕的內容，不是介面外框） */
+  --bezel: var(--nord-polar1);
+  --screen-ink: var(--nord-snow2);
+  --screen-cap: rgb(46 52 64 / .72);
+  --screen-badge: rgb(236 239 244 / .22);
+  --screen-eye: var(--nord-polar0);
+  --screen-floor-edge: rgb(46 52 64 / .25);
+  --screen-shade: rgb(46 52 64 / .14);
+  --sky-night: linear-gradient(var(--nord-polar0), var(--nord-polar2));
+  --sky-dawn: linear-gradient(var(--nord-polar3), var(--nord-orange));
+  --sky-day: linear-gradient(var(--nord-frost3), var(--nord-frost1));
+  --sky-dusk: linear-gradient(var(--nord-frost3), var(--nord-orange));
+  --sky-evening: linear-gradient(var(--nord-polar1), var(--nord-purple));
+
+  /* 角色外觀（appearance key → 身體顏色）；未知的 key 依序取 look-1..6 */
+  --look-xiaobai: var(--nord-snow2);
+  --look-xiaojimao: var(--nord-yellow);
+  --look-1: var(--nord-frost0);
+  --look-2: var(--nord-purple);
+  --look-3: var(--nord-frost2);
+  --look-4: var(--nord-orange);
+  --look-5: var(--nord-green);
+  --look-6: var(--nord-frost1);
+
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+
+/* ── 基礎 ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+::selection { background: var(--primary); color: var(--ink-bright); }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; color: var(--accent); }
+h1 { font-size: 1.8rem; font-weight: 900; color: var(--ink-strong); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+h1 small { font-family: var(--font-mono); font-size: .72rem; font-weight: 500; letter-spacing: .12em; color: var(--muted); margin-left: .8em; }
+h2 { font-size: 1.05rem; font-weight: 700; color: var(--ink-strong); margin: 0; }
+h3 { font-size: .82rem; font-weight: 700; letter-spacing: .08em; color: var(--accent); margin: 0; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── 面板：polar1 面 + 2px 裸邊框 + 偏移陰影塊 ──────────── */
+.panel { background: var(--panel); border: 2px solid var(--line); border-radius: var(--radius); box-shadow: var(--offset) var(--offset) 0 var(--shadow); padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+.note { font-size: .84rem; color: var(--muted); margin: 0; max-width: 75ch; }
+.status { font-family: var(--font-mono); font-size: .76rem; color: var(--muted); }
+.mono { font-family: var(--font-mono); font-size: .8rem; font-variant-numeric: tabular-nums; }
+/* Aurora red on polar1 is only 2.46:1, so red is never text color: the message is snow, red is the bar. */
+.err { color: var(--ink-strong); border-left: 3px solid var(--danger); padding-left: 8px; }
+label.lbl, .lbl { font-size: .82rem; font-weight: 500; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.empty { color: var(--muted); text-align: center; padding: 40px 16px; border: 2px dashed var(--line); border-radius: var(--radius); }
+
+/* ── 分頁切換 ─────────────────────────────────────────── */
+.tabs { display: inline-flex; border: 2px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
+.tabs button { border: 0; background: transparent; color: var(--muted); padding: 6px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+.tabs button + button { border-left: 2px solid var(--line); }
+.tabs button:hover { color: var(--ink-strong); }
+.tabs button[aria-pressed="true"] { background: var(--primary); color: var(--ink-bright); }
+
+/* ── 按鈕：裸邊 + 偏移塊，按下時往陰影方向沉 ─────────────── */
+.btn { border: 2px solid var(--line); background: var(--panel); color: var(--ink); border-radius: var(--radius); padding: 4px 12px; font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; white-space: nowrap; box-shadow: 3px 3px 0 var(--shadow-ghost); transition: transform .08s, box-shadow .08s; }
+.btn:hover { border-color: var(--accent); }
+.btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow-ghost); }
+.btn.primary { background: var(--primary); color: var(--ink-bright); border-color: var(--primary-edge); box-shadow: 3px 3px 0 var(--shadow-solid); letter-spacing: .04em; }
+.btn.primary:active:not(:disabled) { box-shadow: 1px 1px 0 var(--shadow-solid); }
+.btn.danger { border-color: var(--danger); box-shadow: 3px 3px 0 var(--shadow-danger); }
+.btn.danger:hover { border-color: var(--danger); background: var(--panel-head); }
+.btn.small { padding: 1px 8px; font-size: .8rem; box-shadow: 2px 2px 0 var(--shadow-ghost); }
+.btn.small.danger { box-shadow: 2px 2px 0 var(--shadow-danger); }
+.btn:disabled { opacity: .5; cursor: default; }
+
+/* ── 輸入 ─────────────────────────────────────────────── */
+input[type="text"], input[type="email"], input[type="number"], input[type="password"], input[type="date"], select, textarea {
+  font: inherit; font-size: .9rem; padding: 4px 8px; border: 2px solid var(--line); border-radius: var(--radius);
+  background: var(--field); color: var(--ink-strong); min-width: 0; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+textarea { font-family: var(--font-mono); font-size: .8rem; width: 100%; min-height: 180px; resize: vertical; }
+input[type="range"] { accent-color: var(--primary); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
+
+/* ── 標記 ─────────────────────────────────────────────── */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 2px solid var(--line); background: var(--panel); color: var(--muted); border-radius: var(--radius); padding: 1px 10px; font: inherit; font-size: .82rem; cursor: pointer; }
+.chip:hover { color: var(--ink-strong); }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--panel-head); color: var(--accent); font-weight: 700; }
+.pill { display: inline-block; padding: 0 8px; border-radius: 2px; font-size: .74rem; border: 1.5px solid var(--line); color: var(--muted); }
+.pill.on { color: var(--ok); border-color: currentColor; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .8rem; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+
+/* ── 表格 ─────────────────────────────────────────────── */
+table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { color: var(--muted); font-weight: 600; font-size: .76rem; letter-spacing: .06em; white-space: nowrap; border-bottom-width: 2px; }
+
+/* ── Dialog 與 toast ──────────────────────────────────── */
+dialog { border: 2px solid var(--line); border-top-color: var(--primary); border-radius: var(--radius); background: var(--panel); color: var(--ink); padding: 0; box-shadow: 6px 6px 0 var(--shadow); }
+dialog::backdrop { background: var(--scrim); }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--panel-head); color: var(--ink-strong); border: 2px solid var(--primary); border-radius: var(--radius); box-shadow: var(--offset) var(--offset) 0 var(--shadow); padding: 8px 14px; font-size: .88rem; max-width: calc(100vw - 32px); z-index: 10; }
+.toast.err { border-color: var(--danger); box-shadow: var(--offset) var(--offset) 0 var(--shadow-danger); }
+
+/* ── 裝置畫面：天空依時段、地板依場景類別 ───────────────── */
+.sky[data-sky="night"] { background: var(--sky-night); }
+.sky[data-sky="dawn"] { background: var(--sky-dawn); }
+.sky[data-sky="day"] { background: var(--sky-day); }
+.sky[data-sky="dusk"] { background: var(--sky-dusk); }
+.sky[data-sky="evening"] { background: var(--sky-evening); }

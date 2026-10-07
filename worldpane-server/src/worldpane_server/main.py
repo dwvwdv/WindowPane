@@ -33,6 +33,7 @@ from .security import hash_pairing_code
 from .services import ServiceError, WorldService
 from .simulation.provider import SimulationProvider, build_provider
 from .supabase_auth import SupabaseAuth
+from .theme import with_offbeat
 
 log = logging.getLogger("worldpane_server")
 
@@ -51,7 +52,7 @@ def _dashboard_document(supabase_url: str, supabase_anon_key: str, token_login: 
     template = resources.files("worldpane_server").joinpath("static/dashboard.html").read_text(encoding="utf-8")
     config = {"supabase_url": supabase_url, "supabase_anon_key": supabase_anon_key, "token_login": token_login}
     data = json.dumps(config, separators=(",", ":")).replace("</", "<\\/")
-    return template.replace("/*__DASHBOARD_CONFIG__*/null", data, 1)
+    return with_offbeat(template).replace("/*__DASHBOARD_CONFIG__*/null", data, 1)
 
 
 def build_repository(settings: Settings) -> Repository:

@@ -1,0 +1,32 @@
+name: Docs
+
+# 文件一致性守衛（tests/test_docs_consistency.py）：AGENTS.md 大小、CLAUDE.md 只匯入 AGENTS.md、
+# 文件提到的路徑存在、兩個 package 的版號一致且有 changelog 條目。
+# 刻意不設 paths 過濾：刪掉任何一個被文件提到的檔案都可能讓它失敗，而整個 job 不到半分鐘。
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  consistency:
+    name: Docs consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Install pytest
+        run: python -m pip install pytest
+      - name: Docs ↔ code consistency
+        run: python -m pytest tests
